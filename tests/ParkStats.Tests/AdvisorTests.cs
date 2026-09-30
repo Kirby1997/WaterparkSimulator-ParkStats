@@ -663,7 +663,31 @@ public class AdvisorTests
         Assert.Equal(Severity.Medium, advice.Severity);
         Assert.Contains("1/1", advice.Detail);
         Assert.Contains("3 waiting", advice.Detail);
-        Assert.Contains("Crew Challenge Slide", advice.Detail);
+        Assert.Contains("Busiest: Wave Slide", advice.Detail);
+        Assert.Contains("Best unlocked for it: Crew Challenge Slide", advice.Detail);
+    }
+
+    [Fact]
+    public void Food_advice_names_what_is_not_built_yet_instead_of_what_is_already_there()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Ice Cream Stand", Category = Demand.FoodAndDrink, Staffed = true, Raises = new[] { "Hunger" }, Capacity = 1, UsersNow = 1, QueueLength = 3 },
+            },
+            BuildOptions = new[]
+            {
+                new BuildOption { Name = "Ice Cream Stand", Category = Demand.FoodAndDrink, Tier = 3, Staffed = true, Capacity = 1, Raises = new[] { "Hunger" } },
+                new BuildOption { Name = "Snacks Vending Machine", Category = Demand.FoodAndDrink, Tier = 1, Staffed = false, Capacity = 1, Raises = new[] { "Hunger" } },
+            },
+        };
+
+        var detail = Single(park, "build more for hunger").Detail;
+
+        Assert.Contains("Busiest: Ice Cream Stand (staffed)", detail);
+        Assert.Contains("Not built yet for it: Snacks Vending Machine (automated)", detail);
+        Assert.DoesNotContain("Best unlocked", detail);
     }
 
     [Fact]

@@ -324,20 +324,49 @@ public static class Advisor
         return $" Most room per build: {string.Join(", ", roomiest)}.";
     }
 
-    /// <summary>A need whose places are all taken: build more of what serves it, the best tier unlocked.</summary>
+    /// <summary>
+    /// A need whose places are all taken: which of what serves it is busiest, and what could be
+    /// added. Food and drink are separate things (and staffed or not), so for them it names what
+    /// is not built yet rather than a "better" version.
+    /// </summary>
     private static void AddNeedDemand(ParkSnapshot park, List<Advice> advice)
     {
         foreach (var demand in Demand.ByNeed(park))
         {
             if (demand.Verdict is not (DemandVerdict.Short or DemandVerdict.NearlyFull)) continue;
+            var need = demand.Need;
 
             var detail = $"{demand.UsersNow}/{demand.Capacity} places in use";
             if (demand.Waiting > 0) detail += $", {demand.Waiting} waiting";
             detail += ".";
-            var best = Demand.BestUnlocked(park.BuildOptions, o => o.Raises.Contains(demand.Need));
+
+            var busiest = park.Rides
+                .Where(r => r.Raises.Contains(need) && r.IsOpen && !r.IsBroken)
+                .GroupBy(r => r.Name)
+                .OrderByDescending(g => g.Sum(r => r.QueueLength ?? 0))
+                .ThenByDescending(g => g.Sum(r => r.UsersNow ?? 0) / (double)Math.Max(1, g.Sum(r => r.Capacity ?? 0)))
+                .FirstOrDefault();
+            if (busiest is not null)
+            {
+                var first = busiest.First();
+                var waiting = busiest.Sum(r => r.QueueLength ?? 0);
+                detail += $" Busiest: {busiest.Key}{Demand.Service(first.Staffed)}" +
+                          $" ({busiest.Sum(r => r.UsersNow ?? 0)}/{busiest.Sum(r => r.Capacity ?? 0)} in use" +
+                          (waiting > 0 ? $", {waiting} waiting)." : ").");
+            }
+
+            var best = Demand.BestUnlocked(park.BuildOptions, o => o.Raises.Contains(need) && o.Category != Demand.FoodAndDrink);
             if (best is not null) detail += $" Best unlocked for it: {best.Name} ({best.Capacity} at once).";
 
-            advice.Add(new Advice(Severity.Medium, $"Build more for {demand.Need}", detail));
+            var missing = park.BuildOptions
+                .Where(o => o.Raises.Contains(need) && o.Category == Demand.FoodAndDrink && o.LockedBy is null && Demand.NotOwned(park, o))
+                .OrderByDescending(o => o.Tier)
+                .Take(2)
+                .Select(o => o.Name + Demand.Service(o.Staffed))
+                .ToList();
+            if (missing.Count > 0) detail += $" Not built yet for it: {string.Join(", ", missing)}.";
+
+            advice.Add(new Advice(Severity.Medium, $"Build more for {need}", detail));
         }
     }
 

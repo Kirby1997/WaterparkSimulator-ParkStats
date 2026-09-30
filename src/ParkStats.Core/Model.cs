@@ -45,6 +45,9 @@ public sealed record RideRow
     /// <summary>The needs it raises when a guest uses it.</summary>
     public IReadOnlyList<string> Raises { get; init; } = Array.Empty<string>();
 
+    /// <summary>For food and drink: true when staff serve at it, false for a vending machine.</summary>
+    public bool? Staffed { get; init; }
+
     /// <summary>Guests using it right now, and how many it takes at once.</summary>
     public int? UsersNow { get; init; }
     public int? Capacity { get; init; }
@@ -76,6 +79,9 @@ public sealed record BuildOption
     /// <summary>Its type ("Slides", "Loungers") and tier: the prestige level it needs.</summary>
     public string? Category { get; init; }
     public int Tier { get; init; }
+
+    /// <summary>For food and drink: true when staff serve at it, false for a vending machine.</summary>
+    public bool? Staffed { get; init; }
 
     /// <summary>Visitors it adds room for: how many guests can use it at once.</summary>
     public int Capacity { get; init; }

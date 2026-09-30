@@ -225,7 +225,9 @@ public static class Pages
             }
         }
 
-        var categories = park.BuildOptions.Select(o => o.Category).OfType<string>().Distinct().OrderBy(c => c, StringComparer.Ordinal);
+        var categories = park.BuildOptions.Select(o => o.Category).OfType<string>()
+            .Where(c => c != Demand.FoodAndDrink)
+            .Distinct().OrderBy(c => c, StringComparer.Ordinal);
         var best = new List<Row>();
         foreach (var category in categories)
         {
@@ -238,6 +240,22 @@ public static class Pages
         {
             rows.Add(Row.Of(RowKind.Header, "Best you can build"));
             rows.AddRange(best);
+        }
+
+        // Each stand or machine sells its own thing, so what is missing matters, not tiers.
+        var food = park.BuildOptions
+            .Where(o => o.Category == Demand.FoodAndDrink && o.LockedBy is null && Demand.NotOwned(park, o))
+            .OrderByDescending(o => o.Tier)
+            .Take(BuildOptionsShown)
+            .ToList();
+        if (food.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Food and drink not built yet"));
+            foreach (var option in food)
+            {
+                var needs = option.Raises.Count > 0 ? $", {string.Join(", ", option.Raises)}" : "";
+                rows.Add(Row.Of(RowKind.Normal, $"{option.Name}{Demand.Service(option.Staffed)}{needs}"));
+            }
         }
 
         var upgrades = Demand.Upgrades(park);
@@ -437,12 +455,10 @@ public static class Pages
         var priced = rides.Where(r => r.Price is not null).ToList();
         if (priced.Count == 0) return Blank;
 
+        // The price alone. Prices away from the game's ideal are pointed out in the advice.
         var lowest = priced.Min(r => r.Price);
         var highest = priced.Max(r => r.Price);
-        if (lowest != highest) return $"{Format.Money(lowest)}-{Format.Money(highest)}";
-
-        var ideal = priced[0].IdealPrice;
-        return ideal is null ? Format.Money(lowest) : $"{Format.Money(lowest)}/{Format.Money(ideal)}";
+        return lowest == highest ? Format.Money(lowest) : $"{Format.Money(lowest)}-{Format.Money(highest)}";
     }
 
     private static void AddCounts(List<Row> rows, string header, IEnumerable<CountLine> lines, int limit)

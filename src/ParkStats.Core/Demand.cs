@@ -24,6 +24,12 @@ public static class Demand
 {
     public static readonly string[] Needs = { "Fun", "Energy", "Hygiene", "Thirst", "Hunger", "Toilet", "Trash" };
 
+    /// <summary>
+    /// Food and drink are not tiers of one another: an ice cream stand is not a better vending
+    /// machine, and one needs staff where the other does not.
+    /// </summary>
+    public const string FoodAndDrink = "Food and drink";
+
     private const double NearlyFullFrom = 0.8;
     private const double PlentyBelow = 0.3;
 
@@ -59,6 +65,18 @@ public static class Demand
         return result;
     }
 
+    /// <summary>" (staffed)" or " (automated)" for food and drink, nothing when unknown.</summary>
+    public static string Service(bool? staffed) => staffed switch
+    {
+        true => " (staffed)",
+        false => " (automated)",
+        _ => "",
+    };
+
+    /// <summary>True when the park has none of this building, going by the catalogue or by name.</summary>
+    public static bool NotOwned(ParkSnapshot park, BuildOption option) =>
+        option.Owned == 0 && !park.Rides.Any(r => r.Name == option.Name);
+
     public static string Describe(DemandVerdict verdict) => verdict switch
     {
         DemandVerdict.NoneBuilt => "None built",
@@ -81,7 +99,7 @@ public static class Demand
     public static IReadOnlyList<(string Owned, int Count, BuildOption Better)> Upgrades(ParkSnapshot park)
     {
         var upgrades = new List<(string, int, BuildOption)>();
-        foreach (var kind in park.Rides.Where(r => r.Category is not null && r.Tier is not null).GroupBy(r => r.Name))
+        foreach (var kind in park.Rides.Where(r => r.Category is not null && r.Category != FoodAndDrink && r.Tier is not null).GroupBy(r => r.Name))
         {
             var sample = kind.First();
             var best = BestUnlocked(park.BuildOptions, o => o.Category == sample.Category);

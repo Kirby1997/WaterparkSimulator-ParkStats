@@ -82,6 +82,22 @@ public class DemandTests
     }
 
     [Fact]
+    public void Food_and_drink_are_never_offered_as_upgrades_of_one_another()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[] { new RideRow { Name = "Snacks Vending Machine", Category = Demand.FoodAndDrink, Tier = 1, Staffed = false } },
+            BuildOptions = new[]
+            {
+                new BuildOption { Name = "Snacks Vending Machine", Category = Demand.FoodAndDrink, Tier = 1, Staffed = false },
+                new BuildOption { Name = "Ice Cream Stand", Category = Demand.FoodAndDrink, Tier = 3, Staffed = true },
+            },
+        };
+
+        Assert.Empty(Demand.Upgrades(park));
+    }
+
+    [Fact]
     public void Owning_the_best_unlocked_tier_needs_no_upgrade()
     {
         var park = new ParkSnapshot

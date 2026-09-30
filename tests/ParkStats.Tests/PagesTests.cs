@@ -136,8 +136,8 @@ public class PagesTests
         var texts = Texts(Pages.Rides(park));
 
         Assert.Equal("Attraction | State | Uses | Price | Clean | Durab. | Wait", texts[0]);
-        Assert.Equal("Big Slide | Open | 31 | 5/8 | 55% | 70% | 3", texts[1]);
-        Assert.Equal("Kids Pool | Open | 4 | 10/10 | 90% | 80% | 0", texts[2]);
+        Assert.Equal("Big Slide | Open | 31 | 5 | 55% | 70% | 3", texts[1]);
+        Assert.Equal("Kids Pool | Open | 4 | 10 | 90% | 80% | 0", texts[2]);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class PagesTests
             },
         };
 
-        Has(Pages.Rides(park), RowKind.Normal, "Rusty Lounger x3 | Open | 9 | 1/1 | 90% | 74% | 3");
+        Has(Pages.Rides(park), RowKind.Normal, "Rusty Lounger x3 | Open | 9 | 1 | 90% | 74% | 3");
     }
 
     [Fact]
@@ -273,8 +273,23 @@ public class PagesTests
             new BuildOption { Name = "Crew Challenge Slide", Category = "Slides", Tier = 4, Price = 3000, Capacity = 1, IdealPrice = 50, Raises = new[] { "Fun" } },
             new BuildOption { Name = "Wooden Hot Tub", Category = "Hot tubs", Tier = 3, Price = 900, Capacity = 3, IdealPrice = 22, Raises = new[] { "Fun" } },
             new BuildOption { Name = "Mega Slide", Category = "Slides", Tier = 5, Price = 9000, Capacity = 2, LockedBy = "prestige 5" },
+            new BuildOption { Name = "Ice Cream Stand", Category = Demand.FoodAndDrink, Tier = 3, Price = 900, Capacity = 1, Owned = 1, Staffed = true, Raises = new[] { "Hunger" } },
+            new BuildOption { Name = "Hotdog Stand", Category = Demand.FoodAndDrink, Tier = 2, Price = 700, Capacity = 1, Staffed = true, Raises = new[] { "Hunger" } },
+            new BuildOption { Name = "Drinks Vending Machine", Category = Demand.FoodAndDrink, Tier = 1, Price = 300, Capacity = 1, Staffed = false, Raises = new[] { "Thirst" } },
         },
     };
+
+    [Fact]
+    public void Build_lists_food_and_drink_not_built_yet_as_separate_things_with_who_serves_them()
+    {
+        var rows = Pages.Build(BuildPark);
+
+        Has(rows, RowKind.Header, "Food and drink not built yet");
+        Has(rows, RowKind.Normal, "Hotdog Stand (staffed), Hunger");
+        Has(rows, RowKind.Normal, "Drinks Vending Machine (automated), Thirst");
+        Assert.DoesNotContain(Texts(rows), t => t.StartsWith("Ice Cream Stand"));
+        Assert.DoesNotContain(Texts(rows), t => t.StartsWith("Food and drink:"));
+    }
 
     [Fact]
     public void Build_starts_with_how_busy_whatever_serves_each_need_is()
@@ -285,6 +300,14 @@ public class PagesTests
         Has(rows, RowKind.Normal, "Energy | 0/1 | 0 | Plenty");
         Has(rows, RowKind.Bad, "Fun | 1/1 | 3 | Short");
         Has(rows, RowKind.Muted, "Thirst | - | - | None built");
+    }
+
+    [Fact]
+    public void Rides_shows_the_price_alone()
+    {
+        var park = new ParkSnapshot { Rides = new[] { new RideRow { Name = "Pool", Price = 33, IdealPrice = 33 } } };
+
+        Assert.Equal("Pool | Open | 0 | 33 | n/a | n/a | -", Pages.Rides(park)[1].Text);
     }
 
     [Fact]

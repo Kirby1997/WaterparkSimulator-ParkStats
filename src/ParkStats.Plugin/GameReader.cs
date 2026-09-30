@@ -676,6 +676,15 @@ internal sealed class GameReader
                 if (id != null) Add(owned, id);
             }
 
+            var ownedShops = new Dictionary<string, bool?>();
+            for (var i = 0; attractions != null && i < attractions.Count; i++)
+            {
+                var attraction = attractions[i];
+                if (attraction == null) continue;
+                var staffed = StaffedOf(attraction);
+                if (staffed != null) ownedShops[RideName(attraction)] = staffed;
+            }
+
             var prestige = game.ParkPrestigeInt;
             var options = new List<BuildOption>(_catalogue.Count);
             foreach (var entry in _catalogue)
@@ -689,6 +698,7 @@ internal sealed class GameReader
                 {
                     Owned = owned.TryGetValue(building.UniqueID ?? "", out var count) ? count : 0,
                     LockedBy = lockedBy,
+                    Staffed = entry.Option.Category == Demand.FoodAndDrink ? StaffedOf(building, entry.Option.Name, ownedShops) : null,
                 });
             }
             return options;
@@ -732,6 +742,38 @@ internal sealed class GameReader
         return entries;
     }
 
+    /// <summary>
+    /// Whether staff serve at a shop. The game gives vending machines their own class; every
+    /// other shop is a stand run by a vendor. Nothing for attractions that are not shops.
+    /// </summary>
+    private bool? StaffedOf(AttractionInteraction attraction)
+    {
+        try
+        {
+            if (attraction.TryCast<VendingMachineAttraction>() != null) return false;
+            if (attraction.TryCast<ShopInteraction>() != null) return true;
+        }
+        catch (Exception e)
+        {
+            Report("Shop kind", e);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The same for a building in the catalogue, which has no attraction to look at. An owned
+    /// one of the same name is asked; failing that, the building's internal name says whether
+    /// it is a vending machine.
+    /// </summary>
+    private static bool? StaffedOf(BuildingSO building, string name, IReadOnlyDictionary<string, bool?> ownedShops)
+    {
+        if (ownedShops.TryGetValue(name, out var known) && known != null) return known;
+        var id = (building.name ?? "") + " " + (building.UniqueID ?? "");
+        if (id.Contains("Vending", StringComparison.OrdinalIgnoreCase)) return false;
+        if (id.Contains("Stand", StringComparison.OrdinalIgnoreCase) || id.Contains("Stall", StringComparison.OrdinalIgnoreCase)) return true;
+        return null;
+    }
+
     /// <summary>The needs a guest's use raises, from the stat changes the game applies.</summary>
     private static List<string> RaisesOf(AttractionData data)
     {
@@ -763,12 +805,7 @@ internal sealed class GameReader
         if (Has(BuildingTags.TrashBin)) return "Bins";
         if (Has(BuildingTags.Lounge)) return "Loungers";
         if (Has(BuildingTags.Benches)) return "Benches";
-        if (Has(BuildingTags.Refreshments))
-        {
-            if (raises.Contains("Thirst")) return "Drinks";
-            if (raises.Contains("Hunger")) return "Food";
-            return "Shops";
-        }
+        if (Has(BuildingTags.Refreshments)) return Demand.FoodAndDrink;
         if (Has(BuildingTags.Inflatables) || Has(BuildingTags.Inflatable)) return "Inflatables";
         return null;
     }
@@ -882,6 +919,7 @@ internal sealed class GameReader
             Category = building == null ? null : Ref("Category", () => CategoryOf(building.Tags, raises)),
             Tier = building == null ? null : Get("PrestigeLevel", () => building.PrestigeLevel),
             Raises = raises,
+            Staffed = StaffedOf(attraction),
             UsersNow = Get("NumCurrentUsers", () => attraction.NumCurrentUsers),
             Capacity = Get("MaxSimultaneousUsers", () => attraction.MaxSimultaneousUsers),
             BuildPrice = Get("BuildingSO.Price", () => (double)attraction.BuildingSO.Price) is { } buildPrice && buildPrice > 0 ? buildPrice : null,
