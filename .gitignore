@@ -1,0 +1,8 @@
+bin/
+obj/
+dist/
+.vs/
+*.user
+
+# Per-machine override of the game profile location
+GamePaths.user.props
