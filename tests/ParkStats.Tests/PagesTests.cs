@@ -254,6 +254,105 @@ public class PagesTests
         Has(Pages.Rides(new ParkSnapshot()), RowKind.Muted, "No attractions built yet");
     }
 
+    // ---- Build ----
+
+    private static readonly ParkSnapshot BuildPark = new()
+    {
+        AttractionCapacity = 78,
+        Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+        BuildOptions = new[]
+        {
+            new BuildOption { Name = "Treasure Pool", Price = 4000, Capacity = 8, Owned = 2, Raises = new[] { "Fun" } },
+            new BuildOption { Name = "Sunbed Lounger", Price = 300, Capacity = 2, Owned = 17, Raises = new[] { "Energy" } },
+            new BuildOption { Name = "Hotdog Stand", Price = 1200, Capacity = 1, Raises = new[] { "Hunger" } },
+            new BuildOption { Name = "Mega Slide", Price = 9000, Capacity = 4, LockedBy = "prestige 5" },
+            new BuildOption { Name = "Palm Tree", Price = 50 },
+        },
+    };
+
+    [Fact]
+    public void Build_shows_how_much_room_attractions_give_against_what_prestige_allows()
+    {
+        var rows = Pages.Build(BuildPark);
+
+        Has(rows, RowKind.Header, "Room for visitors");
+        Has(rows, RowKind.Normal, "Attractions hold | 78");
+        Has(rows, RowKind.Normal, "Prestige 4 allows | 75");
+        Has(rows, RowKind.Normal, "Prestige 5 allows | 100");
+    }
+
+    [Fact]
+    public void Build_lists_the_cheapest_room_first()
+    {
+        var texts = Texts(Pages.Build(BuildPark));
+
+        var header = Array.IndexOf(texts, "Cheapest room to add");
+        Assert.True(header >= 0);
+        Assert.Equal("Sunbed Lounger | +2 for 300", texts[header + 1]);
+        Assert.Equal("Treasure Pool | +8 for 4,000", texts[header + 2]);
+        Assert.Equal("Hotdog Stand | +1 for 1,200", texts[header + 3]);
+    }
+
+    [Fact]
+    public void Build_lists_attractions_not_built_yet_with_what_they_raise()
+    {
+        var rows = Pages.Build(BuildPark);
+
+        Has(rows, RowKind.Header, "Not built yet");
+        Has(rows, RowKind.Normal, "Hotdog Stand | 1,200, raises Hunger");
+        Assert.DoesNotContain(Texts(rows), t => t.StartsWith("Palm Tree"));
+    }
+
+    [Fact]
+    public void Build_lists_what_is_still_locked_and_why()
+    {
+        var rows = Pages.Build(BuildPark);
+
+        Has(rows, RowKind.Header, "Locked");
+        Has(rows, RowKind.Normal, "Mega Slide | prestige 5");
+    }
+
+    [Fact]
+    public void Build_shows_what_each_attraction_earns_against_its_upkeep_and_how_busy_it_is()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Wave Slide", Price = 30, MaintenancePerDay = 70, Capacity = 1, UsersNow = 1, QueueLength = 3 },
+                new RideRow { Name = "Wave Slide", Price = 30, MaintenancePerDay = 70, Capacity = 1, UsersNow = 1, QueueLength = 0 },
+            },
+            YesterdayAttractions = new Dictionary<string, AttractionDay> { ["Wave Slide"] = new() { Count = 2, Earned = 1200 } },
+        };
+
+        var texts = Texts(Pages.Build(park));
+
+        var header = Array.IndexOf(texts, "Each one, yesterday | Earned | Upkeep | Net | Busy");
+        Assert.True(header >= 0);
+        Assert.Equal("Wave Slide x2 | 600 | 70 | +530 | 2/2 +3", texts[header + 1]);
+    }
+
+    [Fact]
+    public void Build_without_a_recorded_day_shows_todays_takings_and_no_net()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[] { new RideRow { Name = "Wave Slide", UsesToday = 4, Price = 30, MaintenancePerDay = 70 } },
+        };
+
+        var texts = Texts(Pages.Build(park));
+
+        var header = Array.IndexOf(texts, "Each one, today so far | Earned | Upkeep | Net | Busy");
+        Assert.True(header >= 0);
+        Assert.Equal("Wave Slide | 120 | 70 | - | -", texts[header + 1]);
+    }
+
+    [Fact]
+    public void Build_without_a_catalogue_says_so()
+    {
+        Has(Pages.Build(new ParkSnapshot()), RowKind.Muted, "No building data available");
+    }
+
     // ---- Guests ----
 
     [Fact]

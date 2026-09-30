@@ -11,6 +11,7 @@ public sealed record DayRecord
     public double Expenses { get; init; }
     public double? Satisfaction { get; init; }
     public Dictionary<string, double> Needs { get; init; } = new();
+    public Dictionary<string, AttractionDay> Attractions { get; init; } = new();
 
     [JsonIgnore]
     public double Net => Income + Expenses;
@@ -28,6 +29,14 @@ public sealed record DayRecord
             Needs = park.Needs
                 .Where(n => n.Average is not null)
                 .ToDictionary(n => n.Name, n => n.Average!.Value),
+            Attractions = park.Rides
+                .GroupBy(r => r.Name)
+                .ToDictionary(g => g.Key, g => new AttractionDay
+                {
+                    Count = g.Count(),
+                    Uses = g.Sum(r => r.UsesToday),
+                    Earned = g.Sum(r => r.Earned),
+                }),
         };
     }
 }

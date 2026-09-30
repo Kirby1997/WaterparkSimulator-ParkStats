@@ -45,6 +45,27 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_day_record_keeps_what_each_kind_of_attraction_did()
+    {
+        var park = new ParkSnapshot
+        {
+            Day = 7,
+            Rides = new[]
+            {
+                new RideRow { Name = "Wave Slide", UsesToday = 10, Price = 30 },
+                new RideRow { Name = "Wave Slide", UsesToday = 12, Price = 30 },
+                new RideRow { Name = "Park Bin", UsesToday = 5 },
+            },
+        };
+
+        var slides = DayRecord.From(park).Attractions["Wave Slide"];
+
+        Assert.Equal(2, slides.Count);
+        Assert.Equal(22, slides.Uses);
+        Assert.Equal(660, slides.Earned);
+    }
+
+    [Fact]
     public void A_store_with_no_file_starts_empty()
     {
         Assert.Empty(new HistoryStore(FilePath).Records);

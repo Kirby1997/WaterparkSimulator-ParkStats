@@ -38,11 +38,43 @@ public sealed record RideRow
     public int? StockLeft { get; init; }
     public int? StockCapacity { get; init; }
 
+    /// <summary>Guests using it right now, and how many it takes at once.</summary>
+    public int? UsersNow { get; init; }
+    public int? Capacity { get; init; }
+
+    /// <summary>What another one costs to build.</summary>
+    public double? BuildPrice { get; init; }
+
     /// <summary>A guest inside has asked for different settings and not yet got them (sauna, hot tub).</summary>
     public bool HasOpenRequest { get; init; }
 
     /// <summary>Uses today times the current price: what it has taken, near enough.</summary>
     public double Earned => UsesToday * (Price ?? 0);
+}
+
+/// <summary>One kind of attraction over one day: how many there were, their uses and takings.</summary>
+public sealed record AttractionDay
+{
+    public int Count { get; init; }
+    public int Uses { get; init; }
+    public double Earned { get; init; }
+}
+
+/// <summary>Something the player could build, from the game's building catalogue.</summary>
+public sealed record BuildOption
+{
+    public string Name { get; init; } = "";
+    public double Price { get; init; }
+
+    /// <summary>Visitors it adds room for: how many guests can use it at once.</summary>
+    public int Capacity { get; init; }
+    public double? IdealPrice { get; init; }
+    public double? MaintenancePerDay { get; init; }
+    public IReadOnlyList<string> Raises { get; init; } = Array.Empty<string>();
+    public int Owned { get; init; }
+
+    /// <summary>Why it cannot be built yet, e.g. "prestige 5"; nothing when it can.</summary>
+    public string? LockedBy { get; init; }
 }
 
 public sealed record PrestigeInfo
@@ -86,6 +118,19 @@ public sealed record ParkSnapshot
     public IReadOnlyList<CountLine> LeavingReasons { get; init; } = Array.Empty<CountLine>();
 
     public PrestigeInfo? Prestige { get; init; }
+
+    /// <summary>
+    /// Visitors the park's attractions have room for. The game's visitor cap is this number,
+    /// limited to what the prestige level allows.
+    /// </summary>
+    public int? AttractionCapacity { get; init; }
+    public IReadOnlyList<BuildOption> BuildOptions { get; init; } = Array.Empty<BuildOption>();
+
+    /// <summary>
+    /// What each kind of attraction did over the last full day, from history. Today's figures
+    /// cover only part of a day, so they cannot be set against a full day's upkeep.
+    /// </summary>
+    public IReadOnlyDictionary<string, AttractionDay>? YesterdayAttractions { get; init; }
 
     /// <summary>The game's own description of what the next star needs.</summary>
     public string? NextStarTask { get; init; }

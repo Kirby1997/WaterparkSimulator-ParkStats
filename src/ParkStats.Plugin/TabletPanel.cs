@@ -17,7 +17,7 @@ namespace ParkStats.Plugin;
 /// </summary>
 internal sealed class TabletPanel
 {
-    private static readonly string[] TabNames = { "Park", "Today", "Money", "Rides", "Guests", "History", "Advice" };
+    private static readonly string[] TabNames = { "Park", "Today", "Money", "Rides", "Guests", "Build", "History", "Advice" };
 
     // The first tab shows the game's own page untouched.
     private const int ParkTab = 0;
@@ -414,7 +414,14 @@ internal sealed class TabletPanel
     {
         var park = _reader.Read();
         if (park == null) return new[] { Row.Of(RowKind.Muted, "No park loaded") };
-        park = park with { TypicalDayIncome = _history()?.TypicalIncome() };
+        var history = _history();
+        // A full day's figures per attraction, for setting against a day's upkeep.
+        var lastDay = history?.Records.LastOrDefault();
+        park = park with
+        {
+            TypicalDayIncome = history?.TypicalIncome(),
+            YesterdayAttractions = lastDay != null && lastDay.Attractions.Count > 0 ? lastDay.Attractions : null,
+        };
 
         return TabNames[tab] switch
         {
@@ -422,6 +429,7 @@ internal sealed class TabletPanel
             "Money" => Pages.Money(park),
             "Rides" => Pages.Rides(park),
             "Guests" => Pages.Guests(park),
+            "Build" => Pages.Build(park),
             "History" => Pages.History(HistoryRecords()),
             "Advice" => Pages.Advisor(Advisor.Evaluate(park)),
             _ => Array.Empty<Row>(),

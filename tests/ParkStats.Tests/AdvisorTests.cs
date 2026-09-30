@@ -524,6 +524,125 @@ public class AdvisorTests
         Assert.Contains("control panel", advice.Detail);
     }
 
+    private static readonly BuildOption[] Catalogue =
+    {
+        new() { Name = "Treasure Pool", Price = 4000, Capacity = 8 },
+        new() { Name = "Sunbed Lounger", Price = 300, Capacity = 2 },
+        new() { Name = "Wooden Sauna", Price = 600, Capacity = 3, LockedBy = "prestige 5" },
+        new() { Name = "Palm Tree", Price = 50, Capacity = 0 },
+    };
+
+    [Fact]
+    public void Attractions_with_less_room_than_prestige_allows_are_what_limits_visitors()
+    {
+        var park = Healthy() with
+        {
+            AttractionCapacity = 60,
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75 },
+            BuildOptions = Catalogue,
+        };
+
+        var advice = Single(park, "limit your visitors");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("60", advice.Detail);
+        Assert.Contains("75", advice.Detail);
+        Assert.Contains("15 more", advice.Detail);
+    }
+
+    [Fact]
+    public void The_cheapest_room_is_suggested_first_and_only_from_what_can_be_built()
+    {
+        var park = Healthy() with
+        {
+            AttractionCapacity = 60,
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75 },
+            BuildOptions = Catalogue,
+        };
+
+        var detail = Single(park, "limit your visitors").Detail;
+
+        // 150 per place against 500 per place.
+        Assert.True(detail.IndexOf("Sunbed Lounger (+2 for 300)") < detail.IndexOf("Treasure Pool (+8 for 4,000)"));
+        Assert.DoesNotContain("Wooden Sauna", detail);
+        Assert.DoesNotContain("Palm Tree", detail);
+    }
+
+    [Fact]
+    public void Room_short_of_what_the_next_prestige_level_allows_is_pointed_out_early()
+    {
+        var park = Healthy() with
+        {
+            AttractionCapacity = 78,
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+            BuildOptions = Catalogue,
+        };
+
+        var advice = Single(park, "build room");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("prestige 5", advice.Title);
+        Assert.Contains("78", advice.Detail);
+        Assert.Contains("100", advice.Detail);
+        Assert.Contains("22 more", advice.Detail);
+        None(park, "limit your visitors");
+    }
+
+    [Fact]
+    public void Enough_room_for_the_next_prestige_level_needs_no_advice()
+    {
+        var park = Healthy() with
+        {
+            AttractionCapacity = 120,
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+        };
+
+        None(park, "build room");
+        None(park, "limit your visitors");
+    }
+
+    private static ParkSnapshot SlidePark(double earnedYesterday, int? queue) => Healthy() with
+    {
+        Rides = new[]
+        {
+            new RideRow
+            {
+                Name = "Wave Slide", Price = 30, IdealPrice = 30, MaintenancePerDay = 70, BuildPrice = 2000,
+                Capacity = 1, UsersNow = 0, QueueLength = queue, Cleanliness = 0.9, Durability = 0.9,
+            },
+        },
+        YesterdayAttractions = new Dictionary<string, AttractionDay> { ["Wave Slide"] = new() { Count = 1, Earned = earnedYesterday } },
+    };
+
+    [Fact]
+    public void A_profitable_attraction_that_guests_are_waiting_for_is_worth_building_again()
+    {
+        var advice = Single(SlidePark(earnedYesterday: 570, queue: 2), "worth building");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("Wave Slide", advice.Detail);
+        Assert.Contains("500", advice.Detail);
+        Assert.Contains("2,000", advice.Detail);
+        Assert.Contains("4 days", advice.Detail);
+    }
+
+    [Fact]
+    public void A_profitable_attraction_nobody_is_waiting_for_is_not_pushed()
+    {
+        None(SlidePark(earnedYesterday: 570, queue: 0), "worth building");
+    }
+
+    [Fact]
+    public void An_attraction_that_earns_less_than_its_upkeep_is_pointed_out()
+    {
+        var advice = Single(SlidePark(earnedYesterday: 40, queue: 0), "less than their upkeep");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("Wave Slide", advice.Detail);
+        Assert.Contains("40", advice.Detail);
+        Assert.Contains("70", advice.Detail);
+    }
+
     [Fact]
     public void Advice_is_ordered_from_most_to_least_urgent()
     {

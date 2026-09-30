@@ -58,6 +58,8 @@ public static class Advisor
         AddUnused(park, advice);
         AddSatisfactionMultiplier(park, advice);
         AddNextStar(park, advice);
+        AddVisitorRoom(park, advice);
+        AddBuildMore(park, advice);
         AddDecoration(park, advice);
         AddStaff(park, advice);
         AddTopComplaint(park, advice);
@@ -248,6 +250,72 @@ public static class Advisor
         advice.Add(multiplier < 1
             ? new Advice(Severity.Medium, "Low satisfaction is costing visitors", detail)
             : new Advice(Severity.Low, "Higher satisfaction brings more visitors", detail));
+    }
+
+    /// <summary>
+    /// The game sets the visitor cap to the room its attractions give (guests each takes at
+    /// once, plus half its queue), limited to what the prestige level allows. So a park short
+    /// of room gains visitors by building, and a park at its prestige limit does not.
+    /// </summary>
+    private static void AddVisitorRoom(ParkSnapshot park, List<Advice> advice)
+    {
+        if (park.AttractionCapacity is not { } room) return;
+        if (park.Prestige is not { MaxVisitors: { } allowed } prestige) return;
+
+        if (room < allowed)
+        {
+            advice.Add(new Advice(Severity.Medium, "Attractions limit your visitors",
+                $"Your open attractions hold {room} visitors; prestige {prestige.Level} allows {allowed}. " +
+                $"{allowed - room} more places would fill it.{CheapestRoom(park.BuildOptions)}"));
+        }
+        else if (prestige.NextLevelMaxVisitors is { } next && room < next)
+        {
+            advice.Add(new Advice(Severity.Low, $"Build room for prestige {prestige.Level + 1}",
+                $"Prestige {prestige.Level + 1} allows {next} visitors; your attractions hold {room}. " +
+                $"{next - room} more places are needed to use it.{CheapestRoom(park.BuildOptions)}"));
+        }
+    }
+
+    /// <summary>
+    /// What building more would earn. Judged on the last full day: a kind that netted money
+    /// and has guests waiting for it now will earn the same again, and its price over that
+    /// net is how long another one takes to pay for itself.
+    /// </summary>
+    private static void AddBuildMore(ParkSnapshot park, List<Advice> advice)
+    {
+        var economics = AttractionEconomics.For(park);
+
+        var wanted = economics.Where(k => k.Busy && k.PaybackDays is not null).OrderBy(k => k.PaybackDays).Take(NamesShown).ToList();
+        if (wanted.Count > 0)
+        {
+            var lines = wanted.Select(k =>
+            {
+                var days = (int)Math.Ceiling(k.PaybackDays!.Value);
+                return $"{k.Name}: nets about {Format.Money(k.NetEach)} a day each and guests are waiting for it. " +
+                       $"{Format.Money(k.BuildPrice)} to build, paid back in about {days} day{(days == 1 ? "" : "s")}";
+            });
+            advice.Add(new Advice(Severity.Medium, "Worth building another", string.Join(". ", lines) + "."));
+        }
+
+        var losing = economics.Where(k => k.NetEach < 0).OrderBy(k => k.NetEach).Take(NamesShown).ToList();
+        if (losing.Count > 0)
+        {
+            var lines = losing.Select(k =>
+                $"{k.Name}: earned {Format.Money(k.EarnedEach)} a day each against {Format.Money(k.UpkeepEach)} upkeep");
+            advice.Add(new Advice(Severity.Low, "Earning less than their upkeep",
+                string.Join("; ", lines) + ". They may still be worth keeping for the needs they serve."));
+        }
+    }
+
+    private static string CheapestRoom(IReadOnlyList<BuildOption> options)
+    {
+        var cheapest = options
+            .Where(o => o.LockedBy is null && o.Capacity > 0 && o.Price > 0)
+            .OrderBy(o => o.Price / o.Capacity)
+            .Take(NamesShown)
+            .Select(o => $"{o.Name} (+{o.Capacity} for {Format.Money(o.Price)})")
+            .ToList();
+        return cheapest.Count == 0 ? "" : $" Cheapest: {string.Join(", ", cheapest)}.";
     }
 
     private static void AddNextStar(ParkSnapshot park, List<Advice> advice)

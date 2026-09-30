@@ -106,6 +106,8 @@ internal sealed class GameReader
             Needs = ReadNeeds(game, guests, hasGuests, needSources),
             Prestige = ReadPrestige(game, attractions),
             NextStarTask = ReadNextStarTask(game, raw),
+            AttractionCapacity = attractions == null ? null : ReadAttractionCapacity(attractions, raw),
+            BuildOptions = attractions == null ? Array.Empty<BuildOption>() : ReadBuildOptions(game, attractions),
             Complaints = ReadComplaints(game, raw),
             LeavingReasons = guests.LeavingReasons,
 
@@ -599,6 +601,155 @@ internal sealed class GameReader
         }
     }
 
+    /// <summary>
+    /// Visitors the attractions have room for, added up the way the game does it in
+    /// GameManager.RecalculateMaxVisitorCount: each open, built attraction counts the guests it
+    /// takes at once plus half its queue, unless its data gives a fixed figure instead. The
+    /// game then limits the total to what the prestige level allows.
+    /// </summary>
+    private int? ReadAttractionCapacity(AttractionManager manager, List<string> raw)
+    {
+        try
+        {
+            var attractions = manager.ParkAttractions;
+            if (attractions == null) return null;
+
+            var room = 0;
+            for (var i = 0; i < attractions.Count; i++)
+            {
+                var attraction = attractions[i];
+                var data = attraction?.AttractionData;
+                if (data == null) continue;
+
+                if (data.HasCustomMaxVisitorImpact)
+                {
+                    room += data.CustomMaxVisitorImpact;
+                    continue;
+                }
+
+                if (attraction.gameObject.activeInHierarchy && attraction.CanBeUsedByVisitor && attraction.IsBuilt)
+                {
+                    room += attraction.MaxSimultaneousUsers;
+                }
+                if (attraction.HasQueue && attraction.Queue != null)
+                {
+                    room += (int)MathF.Round(attraction.Queue.QueueSize * 0.5f);
+                }
+            }
+            Note(raw, "Attraction capacity (mod's sum)", room);
+            return room;
+        }
+        catch (Exception e)
+        {
+            Report("Attraction capacity", e);
+            return null;
+        }
+    }
+
+    // The parts of the building catalogue that never change while the game runs.
+    private sealed class CatalogueEntry
+    {
+        public CatalogueEntry(BuildingSO building, BuildOption option)
+        {
+            Building = building;
+            Option = option;
+        }
+
+        public BuildingSO Building { get; }
+        public BuildOption Option { get; }
+    }
+
+    private List<CatalogueEntry> _catalogue;
+
+    /// <summary>The attractions in the game's building catalogue, with what is owned and what is locked.</summary>
+    private IReadOnlyList<BuildOption> ReadBuildOptions(GameManager game, AttractionManager manager)
+    {
+        try
+        {
+            _catalogue ??= ReadCatalogue(manager);
+
+            var owned = new Dictionary<string, int>();
+            var attractions = manager.ParkAttractions;
+            for (var i = 0; attractions != null && i < attractions.Count; i++)
+            {
+                var id = attractions[i]?.BuildingSO?.UniqueID;
+                if (id != null) Add(owned, id);
+            }
+
+            var prestige = game.ParkPrestigeInt;
+            var options = new List<BuildOption>(_catalogue.Count);
+            foreach (var entry in _catalogue)
+            {
+                var building = entry.Building;
+                string lockedBy = null;
+                if (building.PrestigeLevel > prestige) lockedBy = $"prestige {building.PrestigeLevel}";
+                else if (building.Requirements != null && !building.Requirements.AreRequirementsMet) lockedBy = "research";
+
+                options.Add(entry.Option with
+                {
+                    Owned = owned.TryGetValue(building.UniqueID ?? "", out var count) ? count : 0,
+                    LockedBy = lockedBy,
+                });
+            }
+            return options;
+        }
+        catch (Exception e)
+        {
+            Report("Building catalogue", e);
+            return Array.Empty<BuildOption>();
+        }
+    }
+
+    private List<CatalogueEntry> ReadCatalogue(AttractionManager manager)
+    {
+        var entries = new List<CatalogueEntry>();
+        var catalogue = manager.BuildingSOs;
+        if (catalogue == null) return entries;
+
+        foreach (var pair in catalogue)
+        {
+            var building = pair.Value;
+            // Console-only and event-only buildings cannot be built in this game at all.
+            if (building == null || !building.IsAttraction || building.XBOXOnly || building.PS5Only) continue;
+            if (building.HalloweenCandiesNeededToUnlock > 0 || building.ChristmasGiftsNeededToUnlock > 0) continue;
+            var data = building.AttractionData;
+            if (data == null) continue;
+
+            var raises = new List<string>();
+            var changes = data.StatChanges;
+            for (var i = 0; changes != null && i < changes.Length; i++)
+            {
+                var need = changes[i] == null || changes[i].Value <= 0 ? null : NeedName(changes[i].Target);
+                if (need != null && !raises.Contains(need)) raises.Add(need);
+            }
+
+            entries.Add(new CatalogueEntry(building, new BuildOption
+            {
+                Name = TranslateTerm(building.LocalizedNameKey) ?? building.name ?? pair.Key,
+                Price = building.Price,
+                Capacity = data.VisitorBonus,
+                IdealPrice = data.IdealPrice > 0 ? data.IdealPrice : null,
+                MaintenancePerDay = data.MaintenanceDailyPrice > 0 ? data.MaintenanceDailyPrice : null,
+                Raises = raises,
+            }));
+        }
+        return entries;
+    }
+
+    private static string TranslateTerm(string term)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(term)) return null;
+            var translation = LocalizationManager.GetTranslation(term);
+            return string.IsNullOrWhiteSpace(translation) ? null : translation.Trim();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     private static string Translate(LocalizedString text)
     {
         try
@@ -689,6 +840,9 @@ internal sealed class GameReader
             StockLeft = stockLeft,
             StockCapacity = stockCapacity,
             HasOpenRequest = HasOpenRequest(attraction),
+            UsersNow = Get("NumCurrentUsers", () => attraction.NumCurrentUsers),
+            Capacity = Get("MaxSimultaneousUsers", () => attraction.MaxSimultaneousUsers),
+            BuildPrice = Get("BuildingSO.Price", () => (double)attraction.BuildingSO.Price) is { } buildPrice && buildPrice > 0 ? buildPrice : null,
         };
     }
 

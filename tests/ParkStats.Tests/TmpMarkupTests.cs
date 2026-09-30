@@ -75,6 +75,12 @@ public class TmpMarkupTests
     }
 
     [Fact]
+    public void Five_cells_use_their_own_columns()
+    {
+        Assert.Equal("A<pos=40%>B<pos=55%>C<pos=69%>D<pos=83%>E", Render(Row.Of(RowKind.Normal, "A", "B", "C", "D", "E")));
+    }
+
+    [Fact]
     public void Angle_brackets_in_cell_text_cannot_inject_tags()
     {
         Assert.Equal("Big 3  5", Render(Row.Of(RowKind.Normal, "<size=200>Big</size> 3 < 5")));

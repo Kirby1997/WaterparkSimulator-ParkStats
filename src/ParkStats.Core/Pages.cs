@@ -28,6 +28,8 @@ public static class Pages
     private const int OverviewAdviceShown = 3;
     private const int LongestRideName = 20;
     private const int EarnersShown = 8;
+    private const int BuildOptionsShown = 6;
+    private const int EconomicsShown = 12;
     // Some game modes give guests a practically endless wallet.
     private const double UnlimitedCashFrom = 500_000;
 
@@ -183,6 +185,81 @@ public static class Pages
         return rows;
     }
 
+    /// <summary>What building would do for the park: room for visitors, and what is on offer.</summary>
+    public static IReadOnlyList<Row> Build(ParkSnapshot park)
+    {
+        var rows = new List<Row>();
+
+        var economics = AttractionEconomics.For(park);
+        if (economics.Count > 0)
+        {
+            // A morning's takings cannot be set against a whole day's upkeep, so a net figure
+            // appears only once a full day is on record.
+            var period = economics.Any(k => k.FullDay) ? "yesterday" : "today so far";
+            rows.Add(Row.Of(RowKind.Header, $"Each one, {period}", "Earned", "Upkeep", "Net", "Busy"));
+            foreach (var kind in economics.Take(EconomicsShown))
+            {
+                var rowKind = kind.NetEach < 0 ? RowKind.Bad : kind.Busy && kind.NetEach > 0 ? RowKind.Good : RowKind.Normal;
+                rows.Add(Row.Of(rowKind,
+                    KindLabel(kind.Name, kind.Count),
+                    Format.Money(kind.EarnedEach),
+                    Format.Money(kind.UpkeepEach),
+                    kind.NetEach is null ? Blank : Format.Signed(kind.NetEach),
+                    BusyCell(kind)));
+            }
+        }
+
+        if (park.AttractionCapacity is not null || park.Prestige?.MaxVisitors is not null)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Room for visitors"));
+            AddIfKnown(rows, "Attractions hold", park.AttractionCapacity);
+            if (park.Prestige is { } prestige)
+            {
+                AddIfKnown(rows, $"Prestige {prestige.Level} allows", prestige.MaxVisitors);
+                AddIfKnown(rows, $"Prestige {prestige.Level + 1} allows", prestige.NextLevelMaxVisitors);
+            }
+        }
+
+        // Only attractions add room; decoration is in the catalogue too but holds nobody.
+        var attractions = park.BuildOptions.Where(o => o.Capacity > 0 && o.Price > 0).ToList();
+        var buildable = attractions.Where(o => o.LockedBy is null).ToList();
+
+        var cheapest = buildable.OrderBy(o => o.Price / o.Capacity).Take(BuildOptionsShown).ToList();
+        if (cheapest.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Cheapest room to add"));
+            foreach (var option in cheapest)
+            {
+                rows.Add(Row.Of(RowKind.Normal, ShortName(option.Name), $"+{option.Capacity} for {Format.Money(option.Price)}"));
+            }
+        }
+
+        var missing = buildable.Where(o => o.Owned == 0).OrderBy(o => o.Price).Take(BuildOptionsShown).ToList();
+        if (missing.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Not built yet"));
+            foreach (var option in missing)
+            {
+                var detail = Format.Money(option.Price);
+                if (option.Raises.Count > 0) detail += $", raises {string.Join(", ", option.Raises)}";
+                rows.Add(Row.Of(RowKind.Normal, ShortName(option.Name), detail));
+            }
+        }
+
+        var locked = attractions.Where(o => o.LockedBy is not null).OrderBy(o => o.Price).Take(BuildOptionsShown).ToList();
+        if (locked.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Locked"));
+            foreach (var option in locked)
+            {
+                rows.Add(Row.Of(RowKind.Normal, ShortName(option.Name), option.LockedBy!));
+            }
+        }
+
+        if (rows.Count == 0) rows.Add(Row.Of(RowKind.Muted, "No building data available"));
+        return rows;
+    }
+
     public static IReadOnlyList<Row> Guests(ParkSnapshot park)
     {
         var rows = new List<Row>();
@@ -319,11 +396,21 @@ public static class Pages
             queues.Count == 0 ? Blank : Format.Count(queues.Sum(r => r.QueueLength!.Value)));
     }
 
+    private static string BusyCell(KindEconomics kind)
+    {
+        var waiting = kind.Waiting > 0 ? $"+{kind.Waiting}" : "";
+        if (kind.UsersNow is null || kind.Capacity is null) return waiting.Length > 0 ? waiting : Blank;
+        return waiting.Length > 0 ? $"{kind.UsersNow}/{kind.Capacity} {waiting}" : $"{kind.UsersNow}/{kind.Capacity}";
+    }
+
     private static string KindLabel(string name, int count)
     {
-        if (name.Length > LongestRideName) name = name[..(LongestRideName - 2)] + "..";
+        name = ShortName(name);
         return count > 1 ? $"{name} x{count}" : name;
     }
+
+    private static string ShortName(string name) =>
+        name.Length > LongestRideName ? name[..(LongestRideName - 2)] + ".." : name;
 
     private static string PriceCell(IReadOnlyList<RideRow> rides)
     {

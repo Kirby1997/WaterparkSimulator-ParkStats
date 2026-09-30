@@ -11,6 +11,7 @@ The game's Park Management page shows the ticket price, the age split, a visitor
 | Money | Today's income and expenses by reason, income per visitor, what each kind of attraction has earned, balance, lifetime totals, loans, staff cost |
 | Rides | Attractions by kind: open, closed, broken or with a guest request waiting, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
 | Guests | Each need with its average and how many guests are under half, which attractions raise it, top complaints with their cause and where they happen, reasons for leaving |
+| Build | What one attraction of each kind earns against its upkeep and how busy it is, room for visitors against what prestige allows, the cheapest attractions to add room with, what is not built yet, what is locked |
 | History | Visitors, net result and satisfaction for past days |
 | Advice | A ranked list of what is holding the park back or losing sales: empty stands, queues, unused or underpriced attractions, the weakest need, and what the next star needs |
 
@@ -30,6 +31,7 @@ Things to know:
 - The Money tab counts every change to your balance. The game's own end-of-day report leaves out miscellaneous income such as trash rewards, so the two can differ by that amount.
 - While the park is empty the game has no satisfaction readings, so needs show as `n/a`.
 - Advice about the ticket price is switched off until the meaning of the game's target price is confirmed.
+- Net earnings per attraction, and the advice to build another, need one full day on record: a morning's takings cannot be set against a whole day's upkeep.
 - Staff cost is judged against the income of recent full days, so that advice stays quiet until one day has been recorded.
 - "Raised by" lists attractions whose use changes a need directly. An attraction that works another way, such as handing out an item, may be missing from it.
 
