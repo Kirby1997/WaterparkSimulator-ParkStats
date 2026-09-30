@@ -76,6 +76,40 @@ public class PagesTests
     }
 
     [Fact]
+    public void Money_lists_what_each_kind_of_attraction_has_earned_today_biggest_first()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Wave Slide", UsesToday = 5, Price = 30 },
+                new RideRow { Name = "Treasure Pool", UsesToday = 10, Price = 33 },
+                new RideRow { Name = "Treasure Pool", UsesToday = 12, Price = 33 },
+                new RideRow { Name = "Park Bin", UsesToday = 20 },
+            },
+        };
+
+        var texts = Texts(Pages.Money(park));
+
+        var header = Array.IndexOf(texts, "Earned by attraction (uses x price)");
+        Assert.True(header >= 0);
+        Assert.Equal("Treasure Pool x2 | 726", texts[header + 1]);
+        Assert.Equal("Wave Slide | 150", texts[header + 2]);
+        Assert.DoesNotContain(texts, t => t.StartsWith("Park Bin"));
+    }
+
+    [Fact]
+    public void Money_shows_income_per_visitor()
+    {
+        var park = new ParkSnapshot { VisitorsToday = 120, MoneyToday = new[] { new MoneyLine("Ticket", 6000) } };
+
+        var rows = Pages.Money(park);
+
+        Has(rows, RowKind.Normal, "Visitors today | 120");
+        Has(rows, RowKind.Normal, "Income per visitor | 50");
+    }
+
+    [Fact]
     public void Money_without_movements_says_so_and_has_no_loans_section()
     {
         var rows = Pages.Money(new ParkSnapshot { Money = 500, TicketPrice = 50 });

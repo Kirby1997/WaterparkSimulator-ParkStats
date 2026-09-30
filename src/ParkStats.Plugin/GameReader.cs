@@ -604,8 +604,18 @@ internal sealed class GameReader
             ? Get("CurrentDurabilityLevel", () => (double)attraction.CurrentDurabilityLevel.Value)
             : null;
 
-        Note(raw, $"Ride {name}",
-            $"price {Number(price)} ideal {Number(ideal)} clean {Number(rawClean)} durability {Number(rawDurability)} maintenance {Number(maintenance)}");
+        // Stands and vending machines sell from a stock that runs out.
+        var shop = Ref("ShopInteraction", () => attraction.TryCast<ShopInteraction>());
+        var stockLeft = shop == null ? null : Get("CurrentStockCount", () => shop.CurrentStockCount);
+        var stockCapacity = shop == null ? null : Get("StockCapacity", () => shop.StockCapacity);
+
+        if (raw != null)
+        {
+            Note(raw, $"Ride {name}",
+                $"price {Number(price)} ideal {Number(ideal)} clean {Number(rawClean)} durability {Number(rawDurability)} maintenance {Number(maintenance)} " +
+                $"stock {stockLeft}/{stockCapacity} visitorBonus {Get("VisitorBonus", () => attraction.AttractionData.VisitorBonus)} " +
+                $"maxUsers {Get("MaxSimultaneousUsers", () => attraction.AttractionData.MaxSimultaneousUsers)} queueFull {Get("IsQueueFull", () => attraction.IsQueueFull)}");
+        }
 
         return new RideRow
         {
@@ -613,8 +623,9 @@ internal sealed class GameReader
             IsOpen = Get("IsOpen", () => attraction.IsOpen) ?? true,
             IsBroken = Get("IsMalfunctioning", () => attraction.IsMalfunctioning.Value) ?? false,
             UsesToday = Get("AmountOfUsesToday", () => attraction.AmountOfUsesToday) ?? 0,
-            // A price of zero means the attraction is free to use, not that it is underpriced.
-            Price = price > 0 ? price : null,
+            // Free with nothing to charge is just free. Free where the game has an ideal price
+            // is money left on the table, so that zero is kept.
+            Price = price > 0 ? price : ideal > 0 ? 0 : null,
             IdealPrice = ideal > 0 ? ideal : null,
             Cleanliness = Normalize.Fraction(rawClean),
             Durability = Normalize.Fraction(rawDurability),
@@ -622,6 +633,8 @@ internal sealed class GameReader
                 ? Get("Queue.AIVisitorCount", () => attraction.Queue.AIVisitorCount)
                 : null,
             MaintenancePerDay = maintenance > 0 ? maintenance : null,
+            StockLeft = stockLeft,
+            StockCapacity = stockCapacity,
         };
     }
 
@@ -662,6 +675,7 @@ internal sealed class GameReader
         Note(raw, "CleanlinessStaffPreventionThreshold", Get("CleanlinessStaffPreventionThreshold", () => GameSettings.Attractions.CleanlinessStaffPreventionThreshold));
         Note(raw, "DurabilityThreshold", Get("DurabilityThreshold", () => GameSettings.Attractions.DurabilityThreshold));
         Note(raw, "DurabilityStaffPreventionThreshold", Get("DurabilityStaffPreventionThreshold", () => GameSettings.Attractions.DurabilityStaffPreventionThreshold));
+        NoteIncomeLevers(game, finance, attractions, raw);
         Note(raw, "ParkPrestige", Get("ParkPrestige", () => game.ParkPrestige.Value));
         var staff = game.StaffManager;
         if (staff != null)
@@ -710,6 +724,53 @@ internal sealed class GameReader
         catch (Exception e)
         {
             Report("PrestigeSettings", e);
+        }
+    }
+
+    // What tips, the ticket price and the visitor cap are made of. Logged so that advice on
+    // them can be written from real numbers rather than from member names.
+    private void NoteIncomeLevers(GameManager game, FinanceSystem finance, AttractionManager attractions, List<string> raw)
+    {
+        try
+        {
+            var ticket = GameSettings.Ticket;
+            Note(raw, "Ticket.MaxTipsPercentage", ticket.MaxTipsPercentage);
+            Note(raw, "Ticket.MaxDecorTipsPercentage", ticket.MaxDecorTipsPercentage);
+            Note(raw, "Ticket.PoolTicketPriceBonus", ticket.PoolTicketPriceBonus);
+            Note(raw, "Ticket.SlideTicketPriceBonus", ticket.SlideTicketPriceBonus);
+            Note(raw, "Ticket.SlidePassBonus", ticket.SlidePassBonus);
+            Note(raw, "Ticket.SeniorDiscount", ticket.SeniorDiscount);
+            Note(raw, "Ticket.TeenDiscount", ticket.TeenDiscount);
+            var cash = ticket.VisitorMoneyBonus;
+            Note(raw, "Ticket.VisitorMoneyBonus", $"{Number(cash.x)}..{Number(cash.y)}");
+            for (var happiness = 0f; happiness <= 1.001f; happiness += 0.25f)
+            {
+                var level = happiness;
+                Note(raw, $"Ticket.GetTipsMultiplier({Number(level)})", Get("GetTipsMultiplier", () => ticket.GetTipsMultiplier(level)));
+            }
+
+            var prestige = ticket.GetPrestigeSettings(game.ParkPrestigeInt);
+            Note(raw, "TicketPrestigeSettings.BaseTicketPrice", prestige?.BaseTicketPrice);
+            Note(raw, "Finance.PoolPricePerTier", GameSettings.Finance.PoolPricePerTier);
+            Note(raw, "Finance.SlidePricePerTier", GameSettings.Finance.SlidePricePerTier);
+            Note(raw, "Finance.UpgradeATMPrice", GameSettings.Finance.UpgradeATMPrice);
+            Note(raw, "TicketMachinesBought", Get("TicketMachinesBought", () => game.ParkUpgradeSystem.TicketMachinesBought));
+            if (finance != null) Note(raw, "GetTipsTechMultiplier()", Get("GetTipsTechMultiplier", () => finance.GetTipsTechMultiplier()));
+
+            var bonus = 0;
+            var rides = attractions?.ParkAttractions;
+            for (var i = 0; rides != null && i < rides.Count; i++)
+            {
+                var ride = rides[i];
+                if (ride != null && ride.IsBuilt) bonus += ride.AttractionData.VisitorBonus;
+            }
+            Note(raw, "Sum of attraction VisitorBonus", bonus);
+            Note(raw, "Park.minVisitors", GameSettings.Park.minVisitors);
+            Note(raw, "Park.GetVisitorLimit(sum)", Get("GetVisitorLimit", () => GameSettings.Park.GetVisitorLimit(bonus)));
+        }
+        catch (Exception e)
+        {
+            Report("Income levers", e);
         }
     }
 

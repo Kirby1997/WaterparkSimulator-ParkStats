@@ -33,6 +33,13 @@ public sealed record RideRow
     public double? Durability { get; init; }
     public int? QueueLength { get; init; }
     public double? MaintenancePerDay { get; init; }
+
+    /// <summary>Items left to sell and how many fit, for stands and vending machines.</summary>
+    public int? StockLeft { get; init; }
+    public int? StockCapacity { get; init; }
+
+    /// <summary>Uses today times the current price: what it has taken, near enough.</summary>
+    public double Earned => UsesToday * (Price ?? 0);
 }
 
 public sealed record PrestigeInfo

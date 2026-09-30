@@ -8,11 +8,11 @@ The game's Park Management page shows the ticket price, the age split, a visitor
 |---|---|
 | Park | The game's own page, unchanged |
 | Today | Net result so far, visitors, satisfaction, prestige, and the three most urgent things to do, each with its reason |
-| Money | Today's income and expenses by reason, balance, lifetime totals, loans, staff cost |
+| Money | Today's income and expenses by reason, income per visitor, what each kind of attraction has earned, balance, lifetime totals, loans, staff cost |
 | Rides | Attractions by kind: open, closed or broken, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
 | Guests | Each need with its average and how many guests are under half, which attractions raise it, what satisfaction does to visitor numbers, top complaints in the game's own words, reasons for leaving |
 | History | Visitors, net result and satisfaction for past days |
-| Advice | A ranked list of what is holding the park back, including what the next star needs |
+| Advice | A ranked list of what is holding the park back or losing sales: empty stands, queues, unused or underpriced attractions, the weakest need, and what the next star needs |
 
 The tabs use the game's own card and text style. While one of them is open, the game's own stats on that card are hidden; the Park tab brings them back.
 

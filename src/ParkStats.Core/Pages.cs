@@ -27,6 +27,7 @@ public static class Pages
     private const int ComplaintsShown = 5;
     private const int OverviewAdviceShown = 3;
     private const int LongestRideName = 20;
+    private const int EarnersShown = 8;
     // Some game modes give guests a practically endless wallet.
     private const double UnlimitedCashFrom = 500_000;
 
@@ -90,6 +91,28 @@ public static class Pages
             }
             rows.Add(Row.Of(RowKind.Normal, "Income", Format.Signed(breakdown.TotalIncome)));
             rows.Add(Row.Of(RowKind.Normal, "Expenses", Format.Signed(breakdown.TotalExpenses)));
+        }
+
+        if (park.VisitorsToday > 0)
+        {
+            rows.Add(Row.Of(RowKind.Normal, "Visitors today", Format.Count(park.VisitorsToday)));
+            rows.Add(Row.Of(RowKind.Normal, "Income per visitor", Format.Money(breakdown.TotalIncome / park.VisitorsToday.Value)));
+        }
+
+        var earners = park.Rides
+            .GroupBy(r => r.Name)
+            .Select(g => (Name: g.Key, Count: g.Count(), Earned: g.Sum(r => r.Earned)))
+            .Where(k => k.Earned > 0)
+            .OrderByDescending(k => k.Earned)
+            .Take(EarnersShown)
+            .ToList();
+        if (earners.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Earned by attraction (uses x price)"));
+            foreach (var earner in earners)
+            {
+                rows.Add(Row.Of(RowKind.Normal, KindLabel(earner.Name, earner.Count), Format.Money(earner.Earned)));
+            }
         }
 
         rows.Add(Row.Of(RowKind.Header, "Park"));
@@ -284,9 +307,7 @@ public static class Pages
             : open == count ? (RowKind.Normal, "Open")
             : (RowKind.Normal, $"{open}/{count} open");
 
-        var name = rides[0].Name;
-        if (name.Length > LongestRideName) name = name[..(LongestRideName - 2)] + "..";
-        if (count > 1) name += $" x{count}";
+        var name = KindLabel(rides[0].Name, count);
 
         var queues = rides.Where(r => r.QueueLength is not null).ToList();
 
@@ -299,6 +320,12 @@ public static class Pages
             Format.Percent(rides.Min(r => r.Cleanliness)),
             Format.Percent(rides.Min(r => r.Durability)),
             queues.Count == 0 ? Blank : Format.Count(queues.Sum(r => r.QueueLength!.Value)));
+    }
+
+    private static string KindLabel(string name, int count)
+    {
+        if (name.Length > LongestRideName) name = name[..(LongestRideName - 2)] + "..";
+        return count > 1 ? $"{name} x{count}" : name;
     }
 
     private static string PriceCell(IReadOnlyList<RideRow> rides)

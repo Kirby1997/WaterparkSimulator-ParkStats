@@ -29,6 +29,9 @@ public static class Advisor
     private const double DecorationLowBelow = 0.5;
     private const double StaffCostShare = 0.5;
     private const int NamesShown = 3;
+    // Below this many uses across the park, an attraction with none yet says nothing.
+    private const int BusyParkUses = 50;
+    private const int ShortestQueueWorthBuildingFor = 2;
 
     private static readonly Dictionary<string, string> NeedHints = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -46,10 +49,13 @@ public static class Advisor
         var advice = new List<Advice>();
 
         AddRideCondition(park, advice);
+        AddEmptyStands(park, advice);
+        AddQueues(park, advice);
         AddWeakestNeed(park, advice);
         AddCapacity(park, advice);
         AddTicketPrice(park, advice);
         AddRidePricing(park, advice);
+        AddUnused(park, advice);
         AddVisitorCap(park, advice);
         AddDecoration(park, advice);
         AddStaff(park, advice);
@@ -90,6 +96,60 @@ public static class Advisor
             advice.Add(new Advice(Severity.Medium, "Maintain worn rides",
                 $"{Names(worn)}: durability below {Format.Percent(wearLimit)}, breakdowns are likely."));
         }
+    }
+
+    private static void AddEmptyStands(ParkSnapshot park, List<Advice> advice)
+    {
+        var empty = Kinds(park.Rides.Where(r => r.IsOpen && !r.IsBroken && r.StockCapacity > 0 && r.StockLeft == 0));
+        if (empty.Count == 0) return;
+
+        advice.Add(new Advice(Severity.High, "Restock empty stands",
+            $"{KindNames(empty)}: sold out. Every guest who walks up leaves without buying."));
+    }
+
+    private static void AddQueues(ParkSnapshot park, List<Advice> advice)
+    {
+        var queued = Kinds(park.Rides)
+            .Select(kind => (Kind: kind, Waiting: kind.Sum(r => r.QueueLength ?? 0)))
+            .Where(k => k.Waiting >= Math.Max(ShortestQueueWorthBuildingFor, k.Kind.Count))
+            .OrderByDescending(k => k.Waiting)
+            .Take(NamesShown)
+            .ToList();
+        if (queued.Count == 0) return;
+
+        var lines = queued.Select(k =>
+        {
+            var line = $"{KindName(k.Kind)}: {k.Waiting} waiting";
+            var earnedEach = k.Kind.Sum(r => r.Earned) / k.Kind.Count;
+            return earnedEach > 0 ? $"{line}, about {Format.Money(earnedEach)} earned each today" : line;
+        });
+        advice.Add(new Advice(Severity.Medium, "Guests are queuing",
+            $"{string.Join("; ", lines)}. Another of these would serve them sooner."));
+    }
+
+    private static void AddUnused(ParkSnapshot park, List<Advice> advice)
+    {
+        if (park.Rides.Sum(r => r.UsesToday) < BusyParkUses) return;
+
+        var unused = Kinds(park.Rides.Where(r => r.Price > 0 && r.IsOpen && !r.IsBroken))
+            .Where(kind => kind.All(r => r.UsesToday == 0))
+            .ToList();
+        if (unused.Count == 0) return;
+
+        advice.Add(new Advice(Severity.Low, "Unused paid attractions",
+            $"{KindNames(unused)}: no guest has used them today. Check that guests can reach them, or try a lower price."));
+    }
+
+    private static List<List<RideRow>> Kinds(IEnumerable<RideRow> rides) =>
+        rides.GroupBy(r => r.Name).Select(g => g.ToList()).ToList();
+
+    private static string KindName(IReadOnlyList<RideRow> kind) =>
+        kind.Count > 1 ? $"{kind[0].Name} x{kind.Count}" : kind[0].Name;
+
+    private static string KindNames(IReadOnlyList<List<RideRow>> kinds)
+    {
+        var shown = string.Join(", ", kinds.Take(NamesShown).Select(KindName));
+        return kinds.Count > NamesShown ? $"{shown} and {kinds.Count - NamesShown} more" : shown;
     }
 
     private static void AddWeakestNeed(ParkSnapshot park, List<Advice> advice)

@@ -405,6 +405,97 @@ public class AdvisorTests
     }
 
     [Fact]
+    public void A_queue_at_a_paid_attraction_suggests_adding_another_and_says_what_each_earns()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Wave Slide", UsesToday = 10, Price = 30, IdealPrice = 30, QueueLength = 3 },
+                new RideRow { Name = "Wave Slide", UsesToday = 10, Price = 30, IdealPrice = 30, QueueLength = 2 },
+            },
+        };
+
+        var advice = Single(park, "queuing");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("Wave Slide", advice.Detail);
+        Assert.Contains("5 waiting", advice.Detail);
+        Assert.Contains("300", advice.Detail);
+    }
+
+    [Fact]
+    public void A_single_guest_waiting_is_not_a_queue_worth_building_for()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[] { new RideRow { Name = "Wave Slide", UsesToday = 10, Price = 30, IdealPrice = 30, QueueLength = 1 } },
+        };
+
+        None(park, "queuing");
+    }
+
+    [Fact]
+    public void A_stand_with_nothing_left_to_sell_is_a_high_priority()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[] { new RideRow { Name = "Ice Cream Stand", Price = 60, IdealPrice = 60, StockLeft = 0, StockCapacity = 12 } },
+        };
+
+        var advice = Single(park, "restock");
+
+        Assert.Equal(Severity.High, advice.Severity);
+        Assert.Contains("Ice Cream Stand", advice.Detail);
+    }
+
+    [Fact]
+    public void A_stand_that_still_has_stock_is_not_reported()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[] { new RideRow { Name = "Ice Cream Stand", Price = 60, IdealPrice = 60, StockLeft = 5, StockCapacity = 12 } },
+        };
+
+        None(park, "restock");
+    }
+
+    [Fact]
+    public void Paid_attractions_nobody_has_used_are_pointed_out_once_the_park_is_busy()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Kids Pool", UsesToday = 60, Price = 5, IdealPrice = 5 },
+                new RideRow { Name = "Wooden Sauna", UsesToday = 0, Price = 25, IdealPrice = 25 },
+                new RideRow { Name = "Park Bin", UsesToday = 0 },
+            },
+        };
+
+        var advice = Single(park, "unused");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("Wooden Sauna", advice.Detail);
+        Assert.DoesNotContain("Park Bin", advice.Detail);
+    }
+
+    [Fact]
+    public void Unused_attractions_are_not_judged_before_the_park_has_been_busy()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Kids Pool", UsesToday = 5, Price = 5, IdealPrice = 5 },
+                new RideRow { Name = "Wooden Sauna", UsesToday = 0, Price = 25, IdealPrice = 25 },
+            },
+        };
+
+        None(park, "unused");
+    }
+
+    [Fact]
     public void Advice_is_ordered_from_most_to_least_urgent()
     {
         var park = Healthy() with
