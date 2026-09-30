@@ -768,10 +768,7 @@ internal sealed class GameReader
     private static bool? StaffedOf(BuildingSO building, string name, IReadOnlyDictionary<string, bool?> ownedShops)
     {
         if (ownedShops.TryGetValue(name, out var known) && known != null) return known;
-        var id = (building.name ?? "") + " " + (building.UniqueID ?? "");
-        if (id.Contains("Vending", StringComparison.OrdinalIgnoreCase)) return false;
-        if (id.Contains("Stand", StringComparison.OrdinalIgnoreCase) || id.Contains("Stall", StringComparison.OrdinalIgnoreCase)) return true;
-        return null;
+        return Demand.StaffedFromNames((building.name ?? "") + " " + (building.UniqueID ?? ""), name);
     }
 
     /// <summary>The needs a guest's use raises, from the stat changes the game applies.</summary>

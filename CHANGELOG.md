@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Food stalls were marked automated: the game names their classes "Vending...", which the check took for a vending machine. Only "Machine" now means automated.
+- Fixtures guests cannot use, such as the restock shelf, are no longer listed as food and drink.
+- The Locked list shows each building once.
+
 ## 0.2.0
 
 - New Build tab. Demand per need: how many of the places that serve it are in use and how many guests wait, rated from "Plenty" to "Short". What one attraction of each kind earned over the last full day against its upkeep. The best building of each type that is unlocked, owned types with a better version unlocked, the visitor limit, and what is still locked.

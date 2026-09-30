@@ -73,6 +73,21 @@ public static class Demand
         _ => "",
     };
 
+    /// <summary>
+    /// Whether a food or drink building is staffed, judged from its names when there is no
+    /// owned one to ask. Nothing when the names do not say.
+    /// </summary>
+    public static bool? StaffedFromNames(string internalName, string displayName)
+    {
+        var names = $"{internalName} {displayName}";
+        bool Says(string word) => names.Contains(word, StringComparison.OrdinalIgnoreCase);
+
+        // Checked first: stalls are "Vending..." in the game's own class names, machines never "Stand".
+        if (Says("Machine")) return false;
+        if (Says("Stand") || Says("Stall") || Says("Cart") || Says("Kiosk")) return true;
+        return null;
+    }
+
     /// <summary>True when the park has none of this building, going by the catalogue or by name.</summary>
     public static bool NotOwned(ParkSnapshot park, BuildOption option) =>
         option.Owned == 0 && !park.Rides.Any(r => r.Name == option.Name);

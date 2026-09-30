@@ -276,6 +276,9 @@ public class PagesTests
             new BuildOption { Name = "Ice Cream Stand", Category = Demand.FoodAndDrink, Tier = 3, Price = 900, Capacity = 1, Owned = 1, Staffed = true, Raises = new[] { "Hunger" } },
             new BuildOption { Name = "Hotdog Stand", Category = Demand.FoodAndDrink, Tier = 2, Price = 700, Capacity = 1, Staffed = true, Raises = new[] { "Hunger" } },
             new BuildOption { Name = "Drinks Vending Machine", Category = Demand.FoodAndDrink, Tier = 1, Price = 300, Capacity = 1, Staffed = false, Raises = new[] { "Thirst" } },
+            new BuildOption { Name = "Restock Shelf", Category = Demand.FoodAndDrink, Tier = 1, Price = 100, Capacity = 0 },
+            new BuildOption { Name = "Custom Slide", Category = "Slides", Tier = 5, Price = 500, Capacity = 1, LockedBy = "research" },
+            new BuildOption { Name = "Custom Slide", Category = "Slides", Tier = 5, Price = 1000, Capacity = 1, LockedBy = "research" },
         },
     };
 
@@ -300,6 +303,18 @@ public class PagesTests
         Has(rows, RowKind.Normal, "Energy | 0/1 | 0 | Plenty");
         Has(rows, RowKind.Bad, "Fun | 1/1 | 3 | Short");
         Has(rows, RowKind.Muted, "Thirst | - | - | None built");
+    }
+
+    [Fact]
+    public void Build_leaves_food_and_drink_fixtures_guests_cannot_use_out_of_the_list()
+    {
+        Assert.DoesNotContain(Texts(Pages.Build(BuildPark)), t => t.StartsWith("Restock Shelf"));
+    }
+
+    [Fact]
+    public void Build_lists_each_locked_building_once()
+    {
+        Assert.Single(Texts(Pages.Build(BuildPark)), t => t.StartsWith("Custom Slide"));
     }
 
     [Fact]

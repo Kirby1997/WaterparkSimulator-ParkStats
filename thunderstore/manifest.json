@@ -1,6 +1,6 @@
 {
   "name": "ParkStats",
-  "version_number": "0.2.0",
+  "version_number": "0.2.1",
   "website_url": "https://github.com/Kirby1997/WaterparkSimulator-ParkStats",
   "description": "Adds money, attraction, guest, build, history and advice tabs to the tablet's Park Management page, with advice on what to fix and what to build.",
   "dependencies": [

@@ -97,6 +97,25 @@ public class DemandTests
         Assert.Empty(Demand.Upgrades(park));
     }
 
+    [Theory]
+    [InlineData("VendingMachine_Drinks", "Drinks Vending Machine", false)]
+    [InlineData("InflatablesVendingMachine", "Inflatable Vending Machine", false)]
+    // The game's classes for stalls are named Vending..., so "Vending" alone says nothing.
+    [InlineData("VendingLemonade", "Lemonade Stand", true)]
+    [InlineData("VendingHotdog", "Hot Dog Stand", true)]
+    [InlineData("VendingPopcorn", "Popcorn Stand", true)]
+    [InlineData("IceCreamStand", "Ice Cream Stand", true)]
+    public void Stalls_are_staffed_and_machines_are_automated(string internalName, string displayName, bool staffed)
+    {
+        Assert.Equal(staffed, Demand.StaffedFromNames(internalName, displayName));
+    }
+
+    [Fact]
+    public void Names_that_say_neither_give_no_answer()
+    {
+        Assert.Null(Demand.StaffedFromNames("RestockShelf", "Restock Shelf"));
+    }
+
     [Fact]
     public void Owning_the_best_unlocked_tier_needs_no_upgrade()
     {

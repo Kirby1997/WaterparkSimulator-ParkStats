@@ -10,7 +10,7 @@ public sealed class Plugin : BasePlugin
 {
     public const string Id = "com.github.kirby1997.parkstats";
     public const string Name = "ParkStats";
-    public const string Version = "0.2.0";
+    public const string Version = "0.2.1";
 
     private readonly HashSet<string> _reported = new();
     private GameReader _reader;

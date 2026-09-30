@@ -245,6 +245,8 @@ public static class Pages
         // Each stand or machine sells its own thing, so what is missing matters, not tiers.
         var food = park.BuildOptions
             .Where(o => o.Category == Demand.FoodAndDrink && o.LockedBy is null && Demand.NotOwned(park, o))
+            // Fixtures such as a restock shelf are tagged as refreshments but serve no guest.
+            .Where(o => o.Capacity > 0 && o.Raises.Count > 0)
             .OrderByDescending(o => o.Tier)
             .Take(BuildOptionsShown)
             .ToList();
@@ -282,6 +284,7 @@ public static class Pages
 
         var locked = park.BuildOptions
             .Where(o => o.LockedBy is not null && o.Capacity > 0)
+            .GroupBy(o => o.Name).Select(g => g.OrderBy(o => o.Tier).ThenBy(o => o.Price).First())
             .OrderBy(o => o.Tier).ThenBy(o => o.Price)
             .Take(BuildOptionsShown)
             .ToList();
