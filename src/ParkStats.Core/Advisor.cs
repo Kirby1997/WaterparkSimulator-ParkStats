@@ -16,15 +16,17 @@ public sealed record Advice(Severity Severity, string Title, string Detail);
 /// </summary>
 public static class Advisor
 {
-    // Used when the game's own threshold could not be read.
-    private const double FallbackConditionThreshold = 0.5;
+    // A ride is called dirty or worn below this. The game's own threshold is used when it is
+    // stricter; the game's can sit at "fully clean", which would flag every ride all day.
+    private const double ConditionThreshold = 0.5;
 
     private const double NeedMediumBelow = 0.6;
     private const double NeedHighBelow = 0.4;
     private const double NearFull = 0.9;
     private const double TicketTolerance = 0.1;
     private const double RidePriceTolerance = 0.2;
-    private const double AttendanceShortfall = 0.8;
+    private const double VisitorCapShortfall = 0.8;
+    private const double DecorationLowBelow = 0.5;
     private const double StaffCostShare = 0.5;
     private const int NamesShown = 3;
 
@@ -51,8 +53,8 @@ public static class Advisor
         AddCapacity(park, advice);
         AddTicketPrice(park, advice);
         AddRidePricing(park, advice);
-        AddPrestige(park, advice);
-        AddAttendance(park, advice);
+        AddVisitorCap(park, advice);
+        AddDecoration(park, advice);
         AddStaff(park, advice);
         AddTopComplaint(park, advice);
 
@@ -76,7 +78,7 @@ public static class Advisor
                 $"{Names(closed)}: closed, earning nothing and serving no needs."));
         }
 
-        var cleanLimit = park.CleanlinessThreshold ?? FallbackConditionThreshold;
+        var cleanLimit = Math.Min(park.CleanlinessThreshold ?? ConditionThreshold, ConditionThreshold);
         var dirty = park.Rides.Where(r => r.Cleanliness < cleanLimit).ToList();
         if (dirty.Count > 0)
         {
@@ -84,7 +86,7 @@ public static class Advisor
                 $"{Names(dirty)}: cleanliness below {Format.Percent(cleanLimit)}."));
         }
 
-        var wearLimit = park.DurabilityThreshold ?? FallbackConditionThreshold;
+        var wearLimit = Math.Min(park.DurabilityThreshold ?? ConditionThreshold, ConditionThreshold);
         var worn = park.Rides.Where(r => r.Durability < wearLimit).ToList();
         if (worn.Count > 0)
         {
@@ -158,41 +160,34 @@ public static class Advisor
         }
     }
 
-    private static void AddPrestige(ParkSnapshot park, List<Advice> advice)
+    private static void AddVisitorCap(ParkSnapshot park, List<Advice> advice)
     {
-        if (park.Prestige is not { NextLevelPoints: { } needed } prestige) return;
+        if (park.MaxVisitors is not { } cap) return;
+        if (park.Prestige is not { MaxVisitors: { } allowed } prestige || allowed <= 0) return;
 
-        var missing = Math.Max(0, needed - prestige.DecorationPoints);
-        var nearlyFull = park.Visitors is { } visitors && park.MaxVisitors is { } max && max > 0
-            && visitors >= max * NearFull;
-
-        var detail = $"{Format.Money(missing)} more decoration points needed " +
-                     $"({Format.Money(prestige.DecorationPoints)}/{Format.Money(needed)}).";
-        if (prestige.NextLevelMaxVisitors is { } nextMax)
+        if (cap < allowed * VisitorCapShortfall)
         {
-            detail += $" Raises the visitor cap to {nextMax}.";
+            var detail = $"The park admits up to {cap} visitors; prestige {prestige.Level} allows {allowed}. " +
+                         "Attractions and recent guest satisfaction decide how much of that you get.";
+            if (park.RecentSatisfaction is { } recent)
+            {
+                detail += $" Recent satisfaction is {Format.Percent(recent)}.";
+            }
+            advice.Add(new Advice(Severity.Medium, "Visitor cap is low", detail));
         }
-        if (nearlyFull)
+        else if (cap >= allowed && prestige.NextLevelMaxVisitors is { } next)
         {
-            detail += " The park is nearly full, so this is what limits growth.";
+            advice.Add(new Advice(Severity.Low, "Prestige limit reached",
+                $"{cap} visitors is the most prestige {prestige.Level} allows. Prestige {prestige.Level + 1} allows {next}."));
         }
-
-        advice.Add(new Advice(nearlyFull ? Severity.High : Severity.Low,
-            $"Decorate for prestige {prestige.Level + 1}", detail));
     }
 
-    private static void AddAttendance(ParkSnapshot park, List<Advice> advice)
+    private static void AddDecoration(ParkSnapshot park, List<Advice> advice)
     {
-        if (park.ExpectedVisitors is not { } expected || park.MaxVisitors is not { } max || max <= 0) return;
-        if (expected >= max * AttendanceShortfall) return;
+        if (park.Prestige?.DecorationLevel is not { } level || level >= DecorationLowBelow) return;
 
-        var detail = $"The park expects {expected} visitors but has room for {max}.";
-        if (park.Satisfaction is { } satisfaction)
-        {
-            detail += $" Satisfaction is {Format.Percent(satisfaction)}; raising it brings more visitors.";
-        }
-
-        advice.Add(new Advice(Severity.Medium, "Attendance below park capacity", detail));
+        advice.Add(new Advice(Severity.Low, "Decorate the park",
+            $"Decoration is at {Format.Percent(level)}. Guests notice decoration, and it raises tips."));
     }
 
     private static void AddStaff(ParkSnapshot park, List<Advice> advice)

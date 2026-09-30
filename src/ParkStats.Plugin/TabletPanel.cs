@@ -47,6 +47,7 @@ internal sealed class TabletPanel
     private bool _diagnosed;
     private long _lastLayout;
     private RectTransform _root;
+    private RectTransform _card;
     private GameObject _bar;
     private GameObject _content;
     private TextMeshProUGUI _text;
@@ -112,6 +113,7 @@ internal sealed class TabletPanel
     private void Build(TabletUI tablet, GameObject page)
     {
         _root = page.GetComponent<RectTransform>();
+        _card = null;
         var template = tablet.TicketPrice;
         var layer = page.layer;
 
@@ -150,7 +152,7 @@ internal sealed class TabletPanel
 
         var viewport = NewObject("Viewport", contentRect, layer);
         var viewportRect = viewport.GetComponent<RectTransform>();
-        Stretch(viewportRect, 16f);
+        Stretch(viewportRect, 24f);
         viewport.AddComponent<RectMask2D>();
 
         _text = NewText("Text", viewportRect, layer, template);
@@ -219,10 +221,34 @@ internal sealed class TabletPanel
     /// <summary>The part of the page holding the game's demographics and need bars, in page space.</summary>
     private Box StatsArea(TabletUI tablet, out string source)
     {
-        var parts = new List<Transform>();
+        source = "no stats elements found";
+        if (StatsElements(tablet) is not { } stats) return default;
+
+        if (_card == null) _card = FindCard(stats);
+        if (_card != null)
+        {
+            source = "card '" + _card.name + "'";
+            return ClampToPage(LocalBox(_card));
+        }
+
+        source = "union of stats elements";
+        return ClampToPage(new Box(stats.XMin - 2 * Padding, stats.YMin - 2 * Padding, stats.XMax + 2 * Padding, stats.YMax + 2 * Padding));
+    }
+
+    /// <summary>Bounds around the texts and bars the game fills in on this page.</summary>
+    private Box? StatsElements(TabletUI tablet)
+    {
+        Box? union = null;
         void Add(Component component)
         {
-            if (component != null) parts.Add(component.transform);
+            var rect = component == null ? null : component.transform.TryCast<RectTransform>();
+            if (rect == null) return;
+
+            var box = LocalBox(rect);
+            union = union is not { } soFar
+                ? box
+                : new Box(Math.Min(soFar.XMin, box.XMin), Math.Min(soFar.YMin, box.YMin),
+                    Math.Max(soFar.XMax, box.XMax), Math.Max(soFar.YMax, box.YMax));
         }
 
         Add(tablet.TeensAmount);
@@ -237,37 +263,62 @@ internal sealed class TabletPanel
         Add(tablet.HungerSlider);
         Add(tablet.ToiletSlider);
         Add(tablet.TrashSlider);
+        return union;
+    }
 
-        source = "no stats elements found";
-        if (parts.Count == 0) return default;
+    /// <summary>
+    /// The background the game draws behind its stats: the smallest image on the page that
+    /// surrounds all of them. The content area takes its place and its shape.
+    /// </summary>
+    private RectTransform FindCard(Box stats)
+    {
+        const float tolerance = 2f;
+        var pageRect = _root.rect;
+        var pageArea = pageRect.width * pageRect.height;
 
-        // Prefer the smallest object containing all of them: normally the white card itself.
-        var container = parts[0].parent;
-        while (container != null && container.Pointer != _root.Pointer && !parts.All(p => p.IsChildOf(container)))
+        RectTransform card = null;
+        Image cardImage = null;
+        var smallest = float.MaxValue;
+
+        var images = _root.GetComponentsInChildren<Image>(true);
+        for (var i = 0; i < images.Length; i++)
         {
-            container = container.parent;
+            var image = images[i];
+            if (image == null) continue;
+            var transform = image.transform;
+            if (transform.IsChildOf(_bar.transform) || transform.IsChildOf(_content.transform)) continue;
+            var rect = transform.TryCast<RectTransform>();
+            if (rect == null) continue;
+
+            var box = LocalBox(rect);
+            var area = box.Width * box.Height;
+            // The page's own full-size background is not the card.
+            if (area >= smallest || area >= pageArea * 0.9f) continue;
+            if (box.XMin > stats.XMin + tolerance || box.XMax < stats.XMax - tolerance) continue;
+            if (box.YMin > stats.YMin + tolerance || box.YMax < stats.YMax - tolerance) continue;
+
+            card = rect;
+            cardImage = image;
+            smallest = area;
         }
 
-        var ticket = tablet.TicketPrice.transform;
-        if (container != null && container.Pointer != _root.Pointer && container.IsChildOf(_root) && !ticket.IsChildOf(container))
+        if (cardImage != null)
         {
-            var containerRect = container.TryCast<RectTransform>();
-            if (containerRect != null)
-            {
-                source = "container '" + container.name + "'";
-                return LocalBox(containerRect);
-            }
+            var background = _content.GetComponent<Image>();
+            background.sprite = cardImage.sprite;
+            background.type = cardImage.type;
         }
+        return card;
+    }
 
-        source = "union of stats elements";
-        var union = LocalBox(parts[0].TryCast<RectTransform>());
-        foreach (var part in parts.Skip(1))
-        {
-            var box = LocalBox(part.TryCast<RectTransform>());
-            union = new Box(Math.Min(union.XMin, box.XMin), Math.Min(union.YMin, box.YMin),
-                Math.Max(union.XMax, box.XMax), Math.Max(union.YMax, box.YMax));
-        }
-        return new Box(union.XMin - 2 * Padding, union.YMin - 2 * Padding, union.XMax + 2 * Padding, union.YMax + 2 * Padding);
+    private Box ClampToPage(Box box)
+    {
+        var page = _root.rect;
+        return new Box(
+            Math.Max(box.XMin, page.x),
+            Math.Max(box.YMin, page.y),
+            Math.Min(box.XMax, page.x + page.width),
+            Math.Min(box.YMax, page.y + page.height));
     }
 
     private void Select(int index)
@@ -312,10 +363,23 @@ internal sealed class TabletPanel
             "Money" => Pages.Money(park),
             "Rides" => Pages.Rides(park),
             "Guests" => Pages.Guests(park),
-            "History" => Pages.History(_history()?.Records ?? Array.Empty<DayRecord>()),
+            "History" => Pages.History(HistoryRecords()),
             "Advice" => Pages.Advisor(Advisor.Evaluate(park)),
             _ => Array.Empty<Row>(),
         };
+    }
+
+    private IReadOnlyList<DayRecord> HistoryRecords()
+    {
+        var history = _history();
+        if (history == null) return Array.Empty<DayRecord>();
+
+        // A day is recorded before the game settles its satisfaction figure; pick it up once it has.
+        foreach (var (day, satisfaction) in _reader.DaySnapshots())
+        {
+            history.FillSatisfaction(day, satisfaction);
+        }
+        return history.Records;
     }
 
     public static IReadOnlyList<string> ModTabs => TabNames.Skip(1).ToArray();

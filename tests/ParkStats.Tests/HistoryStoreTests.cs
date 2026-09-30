@@ -36,6 +36,15 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_day_record_prefers_the_games_figure_for_the_whole_day()
+    {
+        // Once the park has emptied the live satisfaction reads zero; the day's own figure does not.
+        var park = new ParkSnapshot { Day = 7, Satisfaction = 0, DaySatisfaction = 0.64 };
+
+        Assert.Equal(0.64, DayRecord.From(park).Satisfaction);
+    }
+
+    [Fact]
     public void A_store_with_no_file_starts_empty()
     {
         Assert.Empty(new HistoryStore(FilePath).Records);
@@ -94,6 +103,51 @@ public sealed class HistoryStoreTests : IDisposable
         for (var day = 1; day <= 5; day++) store.Add(Day(day));
 
         Assert.Equal(new[] { 3, 4, 5 }, store.Records.Select(r => r.Day));
+    }
+
+    [Fact]
+    public void A_missing_satisfaction_figure_can_be_filled_in_later_and_is_saved()
+    {
+        var store = new HistoryStore(FilePath);
+        store.Add(new DayRecord { Day = 2, Income = 149 });
+
+        store.FillSatisfaction(2, 0.64);
+
+        var record = Assert.Single(new HistoryStore(FilePath).Records);
+        Assert.Equal(0.64, record.Satisfaction);
+        Assert.Equal(149, record.Income);
+    }
+
+    [Fact]
+    public void A_zero_satisfaction_figure_counts_as_missing()
+    {
+        var store = new HistoryStore(FilePath);
+        store.Add(new DayRecord { Day = 2, Satisfaction = 0 });
+
+        store.FillSatisfaction(2, 0.64);
+
+        Assert.Equal(0.64, store.Records[0].Satisfaction);
+    }
+
+    [Fact]
+    public void A_recorded_satisfaction_figure_is_not_overwritten()
+    {
+        var store = new HistoryStore(FilePath);
+        store.Add(new DayRecord { Day = 2, Satisfaction = 0.5 });
+
+        store.FillSatisfaction(2, 0.64);
+
+        Assert.Equal(0.5, store.Records[0].Satisfaction);
+    }
+
+    [Fact]
+    public void Filling_in_a_day_that_was_never_recorded_does_nothing()
+    {
+        var store = new HistoryStore(FilePath);
+
+        store.FillSatisfaction(9, 0.64);
+
+        Assert.Empty(store.Records);
     }
 
     [Fact]

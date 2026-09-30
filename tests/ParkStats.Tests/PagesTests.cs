@@ -68,6 +68,14 @@ public class PagesTests
     }
 
     [Fact]
+    public void Money_leaves_out_staff_cost_when_there_is_none()
+    {
+        var texts = Texts(Pages.Money(new ParkSnapshot { Money = 500, StaffSalary = 0, StaffTax = 0 }));
+
+        Assert.DoesNotContain(texts, t => t.StartsWith("Staff"));
+    }
+
+    [Fact]
     public void Money_without_movements_says_so_and_has_no_loans_section()
     {
         var rows = Pages.Money(new ParkSnapshot { Money = 500, TicketPrice = 50 });
@@ -93,7 +101,7 @@ public class PagesTests
 
         var texts = Texts(Pages.Rides(park));
 
-        Assert.Equal("Attraction | State | Uses | Price | Clean | Durab. | Queue", texts[0]);
+        Assert.Equal("Attraction | State | Uses | Price | Clean | Durab. | Wait", texts[0]);
         Assert.Equal("Big Slide | Open | 31 | 5/8 | 55% | 70% | 3", texts[1]);
         Assert.Equal("Kids Pool | Open | 4 | 10/10 | 90% | 80% | 0", texts[2]);
     }
@@ -134,6 +142,68 @@ public class PagesTests
         Has(rows, RowKind.Normal, "Maintenance per day | 200");
         Has(rows, RowKind.Header, "Capacity in use");
         Has(rows, RowKind.Normal, "Toilets | 11/12");
+    }
+
+    [Fact]
+    public void Rides_with_the_same_name_share_a_row_showing_totals_and_the_worst_condition()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Rusty Lounger", UsesToday = 6, Price = 1, IdealPrice = 1, Cleanliness = 1.0, Durability = 0.74 },
+                new RideRow { Name = "Rusty Lounger", UsesToday = 2, Price = 1, IdealPrice = 1, Cleanliness = 0.9, Durability = 0.87, QueueLength = 1 },
+                new RideRow { Name = "Rusty Lounger", UsesToday = 1, Price = 1, IdealPrice = 1, Cleanliness = 1.0, Durability = 0.87, QueueLength = 2 },
+            },
+        };
+
+        Has(Pages.Rides(park), RowKind.Normal, "Rusty Lounger x3 | Open | 9 | 1/1 | 90% | 74% | 3");
+    }
+
+    [Fact]
+    public void A_group_with_some_rides_closed_says_how_many_are_open()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Shower" },
+                new RideRow { Name = "Shower" },
+                new RideRow { Name = "Shower", IsOpen = false },
+            },
+        };
+
+        Has(Pages.Rides(park), RowKind.Normal, "Shower x3 | 2/3 open | 0 | - | n/a | n/a | -");
+    }
+
+    [Fact]
+    public void A_group_with_a_broken_ride_is_marked_bad_and_says_how_many()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[] { new RideRow { Name = "Shower" }, new RideRow { Name = "Shower", IsBroken = true } },
+        };
+
+        Has(Pages.Rides(park), RowKind.Bad, "Shower x2 | 1 broken | 0 | - | n/a | n/a | -");
+    }
+
+    [Fact]
+    public void A_group_with_every_ride_closed_is_closed()
+    {
+        var park = new ParkSnapshot
+        {
+            Rides = new[] { new RideRow { Name = "Shower", IsOpen = false }, new RideRow { Name = "Shower", IsOpen = false } },
+        };
+
+        Has(Pages.Rides(park), RowKind.Muted, "Shower x2 | Closed | 0 | - | n/a | n/a | -");
+    }
+
+    [Fact]
+    public void Long_attraction_names_are_cut_to_fit_their_column()
+    {
+        var park = new ParkSnapshot { Rides = new[] { new RideRow { Name = "Extremely Long Attraction Name" } } };
+
+        Assert.StartsWith("Extremely Long Att.. | Open", Pages.Rides(park)[1].Text);
     }
 
     [Fact]
@@ -185,6 +255,29 @@ public class PagesTests
         Has(rows, RowKind.Normal, "Average cash | 34");
         Has(rows, RowKind.Normal, "Refunded | 2");
         Has(rows, RowKind.Normal, "Injured | 1");
+    }
+
+    [Fact]
+    public void Guests_leaves_out_expected_visitors_when_it_equals_the_cap()
+    {
+        var texts = Texts(Pages.Guests(new ParkSnapshot { Visitors = 3, MaxVisitors = 8, ExpectedVisitors = 8 }));
+
+        Assert.Contains("In park | 3/8", texts);
+        Assert.DoesNotContain("Expected | 8", texts);
+    }
+
+    [Fact]
+    public void Guests_with_effectively_endless_cash_are_shown_as_unlimited()
+    {
+        Has(Pages.Guests(new ParkSnapshot { AverageGuestCash = 999987 }), RowKind.Normal, "Average cash | unlimited");
+    }
+
+    [Fact]
+    public void Guests_shows_a_need_without_a_reading_as_not_available()
+    {
+        var park = new ParkSnapshot { Needs = new[] { new NeedStat("Fun", null, 0, 0) } };
+
+        Has(Pages.Guests(park), RowKind.Muted, "Fun | n/a | -");
     }
 
     [Fact]
@@ -244,6 +337,14 @@ public class PagesTests
     }
 
     [Fact]
+    public void History_shows_a_day_without_a_satisfaction_figure_as_not_available()
+    {
+        var rows = Pages.History(new[] { new DayRecord { Day = 3, Visitors = 7, Income = 149, Expenses = -209 } });
+
+        Assert.Equal("3 | 7 | -60 | n/a", rows[1].Text);
+    }
+
+    [Fact]
     public void History_with_no_days_explains_when_it_starts()
     {
         Has(Pages.History(Array.Empty<DayRecord>()), RowKind.Muted, "History starts after the first full day");
@@ -252,7 +353,7 @@ public class PagesTests
     // ---- Advice ----
 
     [Fact]
-    public void Advice_shows_each_title_followed_by_its_detail()
+    public void Advice_shows_each_title_followed_by_its_detail_with_a_blank_line_between_items()
     {
         var advice = new[]
         {
@@ -263,9 +364,11 @@ public class PagesTests
         var rows = Pages.Advisor(advice);
 
         Assert.Equal(
-            new[] { "Repair broken rides", "Big Slide: malfunctioning.", "Top complaint", "\"Too pricey\" (3 times)." },
+            new[] { "Repair broken rides", "Big Slide: malfunctioning.", "", "Top complaint", "\"Too pricey\" (3 times)." },
             Texts(rows));
-        Assert.Equal(new[] { RowKind.Bad, RowKind.Muted, RowKind.Normal, RowKind.Muted }, rows.Select(r => r.Kind));
+        Assert.Equal(
+            new[] { RowKind.Bad, RowKind.Muted, RowKind.Normal, RowKind.Normal, RowKind.Muted },
+            rows.Select(r => r.Kind));
     }
 
     [Fact]
@@ -285,7 +388,7 @@ public class PagesTests
             MaxVisitors = 75,
             ExpectedVisitors = 70,
             Satisfaction = 0.71,
-            Prestige = new PrestigeInfo { Level = 2, DecorationPoints = 340, NextLevelPoints = 500 },
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, DecorationLevel = 0.34 },
         };
 
         var rows = Pages.Overview(park, Array.Empty<Advice>());
@@ -294,7 +397,24 @@ public class PagesTests
         Has(rows, RowKind.Normal, "Balance | 12,400");
         Has(rows, RowKind.Normal, "Visitors | 59/75 (expected 70)");
         Has(rows, RowKind.Normal, "Satisfaction | 71%");
-        Has(rows, RowKind.Normal, "Prestige | 2 (decor 340/500)");
+        Has(rows, RowKind.Normal, "Prestige | 4 (allows 75 visitors)");
+        Has(rows, RowKind.Normal, "Decoration | 34%");
+    }
+
+    [Fact]
+    public void Overview_does_not_repeat_expected_visitors_when_it_equals_the_cap()
+    {
+        var park = new ParkSnapshot { Visitors = 3, MaxVisitors = 3, ExpectedVisitors = 3 };
+
+        Has(Pages.Overview(park, Array.Empty<Advice>()), RowKind.Normal, "Visitors | 3/3");
+    }
+
+    [Fact]
+    public void Overview_shows_prestige_alone_when_its_visitor_limit_is_unknown()
+    {
+        var park = new ParkSnapshot { Prestige = new PrestigeInfo { Level = 5 } };
+
+        Has(Pages.Overview(park, Array.Empty<Advice>()), RowKind.Normal, "Prestige | 5");
     }
 
     [Fact]
@@ -303,14 +423,6 @@ public class PagesTests
         var park = new ParkSnapshot { MoneyToday = new[] { new MoneyLine("StaffSalary", -300) } };
 
         Has(Pages.Overview(park, Array.Empty<Advice>()), RowKind.Bad, "Net today | -300");
-    }
-
-    [Fact]
-    public void Overview_shows_top_prestige_without_a_next_target()
-    {
-        var park = new ParkSnapshot { Prestige = new PrestigeInfo { Level = 5, DecorationPoints = 900 } };
-
-        Has(Pages.Overview(park, Array.Empty<Advice>()), RowKind.Normal, "Prestige | 5 (max)");
     }
 
     [Fact]

@@ -227,50 +227,85 @@ public class AdvisorTests
     }
 
     [Fact]
-    public void Decoration_needed_for_the_next_prestige_level_is_reported()
+    public void A_game_threshold_of_fully_clean_does_not_flag_lightly_used_rides()
     {
         var park = Healthy() with
         {
-            Prestige = new PrestigeInfo { Level = 2, DecorationPoints = 340, NextLevelPoints = 500, NextLevelMaxVisitors = 100 },
+            CleanlinessThreshold = 1.0,
+            DurabilityThreshold = 1.0,
+            Rides = new[] { new RideRow { Name = "Kids Pool", Cleanliness = 0.8, Durability = 0.8 } },
         };
 
-        var advice = Single(park, "prestige 3");
-
-        Assert.Equal(Severity.Low, advice.Severity);
-        Assert.Contains("160", advice.Detail);
-        Assert.Contains("100", advice.Detail);
+        None(park, "dirty");
+        None(park, "worn");
     }
 
     [Fact]
-    public void Prestige_becomes_a_high_priority_when_the_park_is_nearly_full()
+    public void A_visitor_cap_well_below_what_prestige_allows_is_reported()
     {
         var park = Healthy() with
         {
-            Visitors = 70,
-            MaxVisitors = 75,
-            Prestige = new PrestigeInfo { Level = 2, DecorationPoints = 340, NextLevelPoints = 500 },
+            MaxVisitors = 6,
+            RecentSatisfaction = 0.37,
+            Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10 },
         };
 
-        Assert.Equal(Severity.High, Single(park, "prestige 3").Severity);
+        var advice = Single(park, "visitor cap");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("6", advice.Detail);
+        Assert.Contains("10", advice.Detail);
+        Assert.Contains("37%", advice.Detail);
+    }
+
+    [Fact]
+    public void A_visitor_cap_close_to_the_prestige_limit_is_not_reported()
+    {
+        var park = Healthy() with { MaxVisitors = 9, Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10 } };
+
+        None(park, "visitor cap");
+    }
+
+    [Fact]
+    public void At_the_prestige_limit_the_next_level_is_pointed_out()
+    {
+        var park = Healthy() with
+        {
+            MaxVisitors = 10,
+            Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10, NextLevelMaxVisitors = 20 },
+        };
+
+        var advice = Single(park, "prestige limit");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("20", advice.Detail);
     }
 
     [Fact]
     public void At_the_top_prestige_level_there_is_no_prestige_advice()
     {
-        var park = Healthy() with { Prestige = new PrestigeInfo { Level = 5, DecorationPoints = 900, NextLevelPoints = null } };
+        var park = Healthy() with { MaxVisitors = 200, Prestige = new PrestigeInfo { Level = 6, MaxVisitors = 200 } };
 
         None(park, "prestige");
     }
 
     [Fact]
-    public void Expected_attendance_far_below_the_cap_is_reported()
+    public void Low_decoration_is_reported()
     {
-        var park = Healthy() with { ExpectedVisitors = 48, MaxVisitors = 75 };
+        var park = Healthy() with { Prestige = new PrestigeInfo { DecorationLevel = 0.2 } };
 
-        var advice = Single(park, "attendance");
+        var advice = Single(park, "decorat");
 
-        Assert.Contains("48", advice.Detail);
-        Assert.Contains("75", advice.Detail);
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("20%", advice.Detail);
+    }
+
+    [Fact]
+    public void Good_decoration_is_not_reported()
+    {
+        var park = Healthy() with { Prestige = new PrestigeInfo { DecorationLevel = 0.7 } };
+
+        None(park, "decorat");
     }
 
     [Fact]

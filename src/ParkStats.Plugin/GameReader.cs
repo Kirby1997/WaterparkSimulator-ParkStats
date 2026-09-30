@@ -37,10 +37,14 @@ internal sealed class GameReader
 
         var moneyToday = isHost && finance != null ? ReadTrackers(finance, raw) : Array.Empty<MoneyLine>();
         var guests = isHost ? ReadGuests(game, raw) : new GuestStats();
+        var day = Get("CurrentDay", () => game.CurrentDay.Value);
+        var visitors = Get("CurrentVisitorCount", () => game.CurrentVisitorCount);
+        // With nobody in the park the game's satisfaction figures read zero, which says nothing.
+        var hasGuests = visitors > 0;
 
         var snapshot = new ParkSnapshot
         {
-            Day = Get("CurrentDay", () => game.CurrentDay.Value),
+            Day = day,
 
             Money = finance == null ? null : Get("CurrentMoney", () => (double)finance.CurrentMoney.Value),
             TotalEarned = finance == null ? null : Get("TotalMoneyEarned", () => (double)finance.TotalMoneyEarned.Value),
@@ -49,15 +53,21 @@ internal sealed class GameReader
             MoneyToday = Normalize.Signs(moneyToday),
             Loans = finance == null ? Array.Empty<LoanLine>() : ReadLoans(finance),
 
-            Visitors = Get("CurrentVisitorCount", () => game.CurrentVisitorCount),
+            Visitors = visitors,
             ExpectedVisitors = Get("ExpectedMaxVisitors", () => game.ExpectedMaxVisitors.Value),
             MaxVisitors = Get("MaxNumberOfVisitors", () => game.MaxNumberOfVisitors.Value),
             VisitorsToday = Get("TotalAmountOfVisitors", () => game.TotalAmountOfVisitors),
             RefundedVisitors = Get("TotalAmountOfRefundedVisitors", () => game.TotalAmountOfRefundedVisitors),
             InjuredVisitors = Get("TotalAmountOfInjuredVisitors", () => game.TotalAmountOfInjuredVisitors),
-            Satisfaction = Normalize.Fraction(Get("CurrentSatisfaction", () => (double)game.CurrentSatisfaction.Value)),
+            Satisfaction = hasGuests
+                ? Normalize.Fraction(Get("CurrentSatisfaction", () => (double)game.CurrentSatisfaction.Value))
+                : null,
+            DaySatisfaction = ReadDaySatisfaction(game, day),
+            RecentSatisfaction = Normalize.Fraction(
+                Get("RecentAverageSatisfaction", () => (double)game.HistorySystem.RecentAverageSatisfaction.Value)),
             AverageGuestCash = guests.AverageCash,
-            Needs = ReadNeeds(game, guests),
+            Needs = ReadNeeds(game, guests, hasGuests),
+            Prestige = ReadPrestige(game, attractions),
             Complaints = ReadComplaints(game, raw),
             LeavingReasons = guests.LeavingReasons,
 
@@ -74,6 +84,30 @@ internal sealed class GameReader
 
         if (raw != null) NoteUnverified(game, finance, attractions, raw);
         return snapshot;
+    }
+
+    /// <summary>The game's own end-of-day satisfaction figures, for the days it still remembers.</summary>
+    public IReadOnlyList<(int Day, double Satisfaction)> DaySnapshots()
+    {
+        var days = new List<(int, double)>();
+        try
+        {
+            var snapshots = GameManager.Instance?.HistorySystem?.Snapshots;
+            if (snapshots == null) return days;
+            for (var i = 0; i < snapshots.Count; i++)
+            {
+                var snapshot = snapshots[i];
+                if (Normalize.Fraction(snapshot.OverallSatisfaction) is { } satisfaction && satisfaction > 0)
+                {
+                    days.Add((snapshot.Day, satisfaction));
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Report("HistorySystem.Snapshots", e);
+        }
+        return days;
     }
 
     /// <summary>File-safe name of the current park, used to keep one history per park.</summary>
@@ -201,11 +235,11 @@ internal sealed class GameReader
         if (value != null && value.Value < value.SatisfactionThreshold) Add(stats.Low, need);
     }
 
-    private IReadOnlyList<NeedStat> ReadNeeds(GameManager game, GuestStats guests)
+    private IReadOnlyList<NeedStat> ReadNeeds(GameManager game, GuestStats guests, bool hasGuests)
     {
         NeedStat Need(string name, Func<float> average) => new(
             name,
-            Normalize.Fraction(Get(name + "Satisfaction", () => (double)average())),
+            hasGuests ? Normalize.Fraction(Get(name + "Satisfaction", () => (double)average())) : null,
             guests.Low.TryGetValue(name, out var low) ? low : 0,
             guests.Counted);
 
@@ -219,6 +253,79 @@ internal sealed class GameReader
             Need("Toilet", () => game.ToiletSatisfaction.Value),
             Need("Trash", () => game.TrashSatisfaction.Value),
         };
+    }
+
+    /// <summary>
+    /// The game's satisfaction figure for a whole day: its end-of-day snapshot when that exists,
+    /// otherwise its running average of the guests who have left so far.
+    /// </summary>
+    private double? ReadDaySatisfaction(GameManager game, int? day)
+    {
+        try
+        {
+            var snapshots = game.HistorySystem?.Snapshots;
+            if (snapshots != null && day != null)
+            {
+                for (var i = 0; i < snapshots.Count; i++)
+                {
+                    var snapshot = snapshots[i];
+                    if (snapshot.Day == day) return Normalize.Fraction(snapshot.OverallSatisfaction);
+                }
+            }
+
+            var leavers = game.dailySatisfactionCount;
+            return leavers > 0 ? Normalize.Fraction(game.dailySatisfactionSum / leavers) : null;
+        }
+        catch (Exception e)
+        {
+            Report("DaySatisfaction", e);
+            return null;
+        }
+    }
+
+    private PrestigeInfo ReadPrestige(GameManager game, AttractionManager attractions)
+    {
+        try
+        {
+            var level = game.ParkPrestigeInt;
+            int? allowed = null, nextAllowed = null;
+            double? decorationNeeded = null;
+
+            var levels = GameSettings.Park.PrestigeSettings;
+            for (var i = 0; i < levels.Count; i++)
+            {
+                var setting = levels[i];
+                var settingLevel = (int)setting.PrestigeLevel;
+                if (settingLevel == level)
+                {
+                    allowed = setting.MaxVisitors;
+                    decorationNeeded = setting.DecorationPointsNeeded;
+                }
+                else if (settingLevel == level + 1)
+                {
+                    nextAllowed = setting.MaxVisitors;
+                }
+            }
+
+            double? decoration = null;
+            if (attractions != null && decorationNeeded > 0)
+            {
+                decoration = Math.Clamp(attractions.ParkDecoration.Value / decorationNeeded.Value, 0, 1);
+            }
+
+            return new PrestigeInfo
+            {
+                Level = level,
+                MaxVisitors = allowed,
+                NextLevelMaxVisitors = nextAllowed,
+                DecorationLevel = decoration,
+            };
+        }
+        catch (Exception e)
+        {
+            Report("Prestige", e);
+            return null;
+        }
     }
 
     private IReadOnlyList<CountLine> ReadComplaints(GameManager game, List<string> raw)
@@ -340,6 +447,14 @@ internal sealed class GameReader
             Note(raw, "DailyTipsTicketBase", Get("DailyTipsTicketBase", () => finance.DailyTipsTicketBase));
         }
 
+        Note(raw, "CurrentSatisfaction", Get("CurrentSatisfaction", () => game.CurrentSatisfaction.Value));
+        Note(raw, "dailySatisfactionSum", Get("dailySatisfactionSum", () => game.dailySatisfactionSum));
+        Note(raw, "dailySatisfactionCount", Get("dailySatisfactionCount", () => game.dailySatisfactionCount));
+        Note(raw, "TotalAmountOfVisitors", Get("TotalAmountOfVisitors", () => game.TotalAmountOfVisitors));
+        Note(raw, "CleanlinessThreshold", Get("CleanlinessThreshold", () => GameSettings.Attractions.CleanlinessThreshold));
+        Note(raw, "CleanlinessStaffPreventionThreshold", Get("CleanlinessStaffPreventionThreshold", () => GameSettings.Attractions.CleanlinessStaffPreventionThreshold));
+        Note(raw, "DurabilityThreshold", Get("DurabilityThreshold", () => GameSettings.Attractions.DurabilityThreshold));
+        Note(raw, "DurabilityStaffPreventionThreshold", Get("DurabilityStaffPreventionThreshold", () => GameSettings.Attractions.DurabilityStaffPreventionThreshold));
         Note(raw, "ParkPrestige", Get("ParkPrestige", () => game.ParkPrestige.Value));
         Note(raw, "ParkPrestigeInt", Get("ParkPrestigeInt", () => game.ParkPrestigeInt));
         Note(raw, "CurrentBonusVisitorCount", Get("CurrentBonusVisitorCount", () => game.CurrentBonusVisitorCount));
@@ -359,6 +474,13 @@ internal sealed class GameReader
                 var level = levels[i];
                 Note(raw, $"PrestigeSettings[{i}]",
                     $"level {Number(level.PrestigeLevel)} maxVisitors {level.MaxVisitors} decorationPointsNeeded {level.DecorationPointsNeeded}");
+            }
+
+            var snapshots = game.HistorySystem.Snapshots;
+            for (var i = 0; i < snapshots.Count; i++)
+            {
+                var snapshot = snapshots[i];
+                Note(raw, $"HistorySnapshot[{i}]", $"day {snapshot.Day} overall {Number(snapshot.OverallSatisfaction)} fun {Number(snapshot.FunSatisfaction)}");
             }
 
             var range = GameSettings.Park.SatisfactionRange;

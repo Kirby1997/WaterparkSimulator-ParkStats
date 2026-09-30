@@ -17,6 +17,7 @@ public sealed class Plugin : BasePlugin
     private HistoryStore _history;
     private string _historyKey;
     private int _historyDays;
+    private bool _diagnosticsLogged;
 
     internal static Plugin Instance { get; private set; }
 
@@ -93,7 +94,9 @@ public sealed class Plugin : BasePlugin
         {
             var path = Path.Combine(DataDirectory, "diagnostics.txt");
             Diagnostics.Write(path, tablet, _reader, Panel, panelLines);
-            Log.LogInfo($"Diagnostics written to {path}");
+            // The file is rewritten on every tab click; saying so once is enough.
+            if (!_diagnosticsLogged) Log.LogInfo($"Diagnostics written to {path}");
+            _diagnosticsLogged = true;
         }
         catch (Exception e)
         {

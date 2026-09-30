@@ -6,3 +6,6 @@ dist/
 
 # Per-machine override of the game profile location
 GamePaths.user.props
+
+# Local secrets (Thunderstore token)
+.env

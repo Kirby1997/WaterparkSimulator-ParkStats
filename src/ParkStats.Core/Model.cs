@@ -30,9 +30,11 @@ public sealed record RideRow
 public sealed record PrestigeInfo
 {
     public int Level { get; init; }
-    public double DecorationPoints { get; init; }
-    public double? NextLevelPoints { get; init; }
+
+    /// <summary>The most visitors this prestige level allows, whatever else the park offers.</summary>
+    public int? MaxVisitors { get; init; }
     public int? NextLevelMaxVisitors { get; init; }
+    public double? DecorationLevel { get; init; }
 }
 
 public sealed record ParkSnapshot
@@ -54,6 +56,12 @@ public sealed record ParkSnapshot
     public int? RefundedVisitors { get; init; }
     public int? InjuredVisitors { get; init; }
     public double? Satisfaction { get; init; }
+
+    /// <summary>The game's satisfaction figure for the day as a whole, once it has one.</summary>
+    public double? DaySatisfaction { get; init; }
+
+    /// <summary>The game's average over recent days, which is what sets the visitor cap.</summary>
+    public double? RecentSatisfaction { get; init; }
     public double? AverageGuestCash { get; init; }
     public IReadOnlyList<NeedStat> Needs { get; init; } = Array.Empty<NeedStat>();
     public IReadOnlyList<CountLine> Complaints { get; init; } = Array.Empty<CountLine>();

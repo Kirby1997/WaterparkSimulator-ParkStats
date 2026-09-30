@@ -26,6 +26,9 @@ public static class Pages
     private const double NeedBadBelow = 0.4;
     private const int ComplaintsShown = 5;
     private const int OverviewAdviceShown = 3;
+    private const int LongestRideName = 20;
+    // Some game modes give guests a practically endless wallet.
+    private const double UnlimitedCashFrom = 500_000;
 
     public static IReadOnlyList<Row> Overview(ParkSnapshot park, IReadOnlyList<Advice> advice)
     {
@@ -40,7 +43,7 @@ public static class Pages
             var visitors = park.MaxVisitors is null
                 ? Format.Count(park.Visitors)
                 : Format.Ratio(park.Visitors, park.MaxVisitors);
-            if (park.ExpectedVisitors is { } expected) visitors += $" (expected {expected})";
+            if (park.ExpectedVisitors is { } expected && expected != park.MaxVisitors) visitors += $" (expected {expected})";
             rows.Add(Row.Of(RowKind.Normal, "Visitors", visitors));
         }
 
@@ -51,10 +54,13 @@ public static class Pages
 
         if (park.Prestige is { } prestige)
         {
-            var progress = prestige.NextLevelPoints is { } needed
-                ? $"decor {Format.Money(prestige.DecorationPoints)}/{Format.Money(needed)}"
-                : "max";
-            rows.Add(Row.Of(RowKind.Normal, "Prestige", $"{prestige.Level} ({progress})"));
+            var level = Format.Count(prestige.Level);
+            if (prestige.MaxVisitors is { } allowed) level += $" (allows {allowed} visitors)";
+            rows.Add(Row.Of(RowKind.Normal, "Prestige", level));
+            if (prestige.DecorationLevel is not null)
+            {
+                rows.Add(Row.Of(RowKind.Normal, "Decoration", Format.Percent(prestige.DecorationLevel)));
+            }
         }
 
         rows.Add(Row.Of(RowKind.Header, "Do next"));
@@ -103,8 +109,8 @@ public static class Pages
         }
         AddIfKnown(rows, "Lifetime earned", park.TotalEarned);
         AddIfKnown(rows, "Lifetime spent", park.TotalSpent);
-        AddIfKnown(rows, "Staff salaries per day", park.StaffSalary);
-        AddIfKnown(rows, "Staff tax", park.StaffTax);
+        if (park.StaffSalary > 0) AddIfKnown(rows, "Staff salaries per day", park.StaffSalary);
+        if (park.StaffTax > 0) AddIfKnown(rows, "Staff tax", park.StaffTax);
 
         if (park.Loans.Count > 0)
         {
@@ -128,10 +134,17 @@ public static class Pages
         }
         else
         {
-            rows.Add(Row.Of(RowKind.Header, "Attraction", "State", "Uses", "Price", "Clean", "Durab.", "Queue"));
-            foreach (var ride in park.Rides.OrderByDescending(r => r.UsesToday).ThenBy(r => r.Name, StringComparer.Ordinal))
+            rows.Add(Row.Of(RowKind.Header, "Attraction", "State", "Uses", "Price", "Clean", "Durab.", "Wait"));
+
+            // A park can hold dozens of the same lounger; one row per kind keeps the table readable.
+            var kinds = park.Rides
+                .GroupBy(r => r.Name)
+                .Select(g => g.ToList())
+                .OrderByDescending(g => g.Sum(r => r.UsesToday))
+                .ThenBy(g => g[0].Name, StringComparer.Ordinal);
+            foreach (var kind in kinds)
             {
-                rows.Add(RideLine(ride));
+                rows.Add(RideLine(kind));
             }
 
             var maintenance = park.Rides.Where(r => r.MaintenancePerDay is not null).ToList();
@@ -175,8 +188,15 @@ public static class Pages
                 ? Format.Count(park.Visitors)
                 : Format.Ratio(park.Visitors, park.MaxVisitors)));
         }
-        AddIfKnown(counts, "Expected", park.ExpectedVisitors);
-        AddIfKnown(counts, "Average cash", park.AverageGuestCash);
+        if (park.ExpectedVisitors != park.MaxVisitors) AddIfKnown(counts, "Expected", park.ExpectedVisitors);
+        if (park.AverageGuestCash >= UnlimitedCashFrom)
+        {
+            counts.Add(Row.Of(RowKind.Normal, "Average cash", "unlimited"));
+        }
+        else
+        {
+            AddIfKnown(counts, "Average cash", park.AverageGuestCash);
+        }
         AddIfKnown(counts, "Refunded", park.RefundedVisitors);
         AddIfKnown(counts, "Injured", park.InjuredVisitors);
         if (counts.Count > 0)
@@ -222,30 +242,53 @@ public static class Pages
         var rows = new List<Row>();
         foreach (var item in advice)
         {
+            if (rows.Count > 0) rows.Add(Row.Of(RowKind.Normal, ""));
             rows.Add(Row.Of(TitleKind(item), item.Title));
             rows.Add(Row.Of(RowKind.Muted, item.Detail));
         }
         return rows;
     }
 
-    private static Row RideLine(RideRow ride)
+    /// <summary>One table row for all attractions of the same kind.</summary>
+    private static Row RideLine(IReadOnlyList<RideRow> rides)
     {
-        var (kind, state) = ride.IsBroken ? (RowKind.Bad, "Broken")
-            : !ride.IsOpen ? (RowKind.Muted, "Closed")
-            : (RowKind.Normal, "Open");
+        var count = rides.Count;
+        var broken = rides.Count(r => r.IsBroken);
+        var open = rides.Count(r => r.IsOpen);
 
-        var price = ride.Price is null ? Blank
-            : ride.IdealPrice is null ? Format.Money(ride.Price)
-            : $"{Format.Money(ride.Price)}/{Format.Money(ride.IdealPrice)}";
+        var (kind, state) = broken > 0 ? (RowKind.Bad, count == 1 ? "Broken" : $"{broken} broken")
+            : open == 0 ? (RowKind.Muted, "Closed")
+            : open == count ? (RowKind.Normal, "Open")
+            : (RowKind.Normal, $"{open}/{count} open");
+
+        var name = rides[0].Name;
+        if (name.Length > LongestRideName) name = name[..(LongestRideName - 2)] + "..";
+        if (count > 1) name += $" x{count}";
+
+        var queues = rides.Where(r => r.QueueLength is not null).ToList();
 
         return Row.Of(kind,
-            ride.Name,
+            name,
             state,
-            Format.Count(ride.UsesToday),
-            price,
-            Format.Percent(ride.Cleanliness),
-            Format.Percent(ride.Durability),
-            ride.QueueLength is null ? Blank : Format.Count(ride.QueueLength));
+            Format.Count(rides.Sum(r => r.UsesToday)),
+            PriceCell(rides),
+            // The worst of the group: that is the one needing attention.
+            Format.Percent(rides.Min(r => r.Cleanliness)),
+            Format.Percent(rides.Min(r => r.Durability)),
+            queues.Count == 0 ? Blank : Format.Count(queues.Sum(r => r.QueueLength!.Value)));
+    }
+
+    private static string PriceCell(IReadOnlyList<RideRow> rides)
+    {
+        var priced = rides.Where(r => r.Price is not null).ToList();
+        if (priced.Count == 0) return Blank;
+
+        var lowest = priced.Min(r => r.Price);
+        var highest = priced.Max(r => r.Price);
+        if (lowest != highest) return $"{Format.Money(lowest)}-{Format.Money(highest)}";
+
+        var ideal = priced[0].IdealPrice;
+        return ideal is null ? Format.Money(lowest) : $"{Format.Money(lowest)}/{Format.Money(ideal)}";
     }
 
     private static void AddCounts(List<Row> rows, string header, IEnumerable<CountLine> lines, int limit)

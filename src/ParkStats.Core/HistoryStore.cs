@@ -24,7 +24,7 @@ public sealed record DayRecord
             Visitors = park.VisitorsToday,
             Income = money.TotalIncome,
             Expenses = money.TotalExpenses,
-            Satisfaction = park.Satisfaction,
+            Satisfaction = park.DaySatisfaction ?? park.Satisfaction,
             Needs = park.Needs
                 .Where(n => n.Average is not null)
                 .ToDictionary(n => n.Name, n => n.Average!.Value),
@@ -59,6 +59,19 @@ public sealed class HistoryStore
         {
             _records.RemoveRange(0, _records.Count - _maxDays);
         }
+        Save();
+    }
+
+    /// <summary>
+    /// Supplies the satisfaction of a recorded day that has none. A day can be recorded before
+    /// the game has settled its figure for it; zero is what the game reports until then.
+    /// </summary>
+    public void FillSatisfaction(int day, double satisfaction)
+    {
+        var index = _records.FindIndex(r => r.Day == day);
+        if (index < 0 || _records[index].Satisfaction is > 0) return;
+
+        _records[index] = _records[index] with { Satisfaction = satisfaction };
         Save();
     }
 

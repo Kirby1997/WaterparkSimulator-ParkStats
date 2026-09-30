@@ -11,8 +11,13 @@ public static class TmpMarkup
         [2] = new[] { 62 },
         [3] = new[] { 50, 75 },
         [4] = new[] { 25, 50, 75 },
-        [7] = new[] { 32, 46, 56, 68, 79, 91 },
+        [7] = new[] { 34, 48, 57, 68, 79, 91 },
     };
+
+    // Tables this wide only fit in smaller text.
+    private const int WideTable = 7;
+    private const string SmallOpen = "<size=80%>";
+    private const string SmallClose = "</size>";
 
     public static string Render(IReadOnlyList<Row> rows)
     {
@@ -27,6 +32,8 @@ public static class TmpMarkup
             }
 
             var (open, close) = Wrap(row.Kind);
+            var small = row.Cells.Count >= WideTable;
+            if (small) text.Append(SmallOpen);
             text.Append(open);
             for (var cell = 0; cell < row.Cells.Count; cell++)
             {
@@ -34,6 +41,7 @@ public static class TmpMarkup
                 text.Append(Plain(row.Cells[cell]));
             }
             text.Append(close);
+            if (small) text.Append(SmallClose);
         }
         return text.ToString();
     }
@@ -44,9 +52,9 @@ public static class TmpMarkup
     private static (string Open, string Close) Wrap(RowKind kind) => kind switch
     {
         RowKind.Header => ("<color=#FFD84A><b>", "</b></color>"),
-        RowKind.Good => ("<color=#7CF29A>", "</color>"),
-        RowKind.Bad => ("<color=#FF8A8A>", "</color>"),
-        RowKind.Muted => ("<color=#A9C4D6>", "</color>"),
+        RowKind.Good => ("<color=#5CFF8F>", "</color>"),
+        RowKind.Bad => ("<color=#FF6B6B>", "</color>"),
+        RowKind.Muted => ("<color=#9AD7FF>", "</color>"),
         _ => ("", ""),
     };
 
