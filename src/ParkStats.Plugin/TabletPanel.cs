@@ -72,7 +72,7 @@ internal sealed class TabletPanel
         _events[source] = _events.GetValueOrDefault(source) + 1;
 
         var page = tablet?.ManagementPage?.mainObject;
-        if (tablet == null || page == null || !page.activeInHierarchy) return;
+        if (tablet == null || page == null) return;
 
         // A new scene creates a new tablet, and the old panel went with the old one.
         if (_tabletPointer != tablet.Pointer)
@@ -101,6 +101,10 @@ internal sealed class TabletPanel
             _lastLayout = now;
             _laidOut = Layout(tablet);
         }
+
+        // Building and measuring happen even while the page is closed, so the tabs are already
+        // in place the moment it opens. Filling them in only matters once it can be seen.
+        if (!page.activeInHierarchy) return;
 
         if (!_diagnosed && (_laidOut || _broken))
         {
@@ -188,7 +192,8 @@ internal sealed class TabletPanel
     private bool Layout(TabletUI tablet)
     {
         var area = StatsArea(tablet, out var areaSource);
-        if (area.Width < 50f || area.Height < 50f) return false;
+        // A closed or not yet sized page can measure as nothing, or as nonsense.
+        if (!(area.Width >= 50f && area.Height >= 50f && float.IsFinite(area.Width) && float.IsFinite(area.Height))) return false;
 
         var ticket = LocalBox(tablet.TicketPrice.GetComponent<RectTransform>());
         var gap = ticket.YMin - area.YMax;
@@ -268,7 +273,7 @@ internal sealed class TabletPanel
 
     /// <summary>
     /// The background the game draws behind its stats: the smallest image on the page that
-    /// surrounds all of them. The content area takes its place and its shape.
+    /// surrounds all of them. The content area is laid exactly over it.
     /// </summary>
     private RectTransform FindCard(Box stats)
     {
@@ -277,7 +282,6 @@ internal sealed class TabletPanel
         var pageArea = pageRect.width * pageRect.height;
 
         RectTransform card = null;
-        Image cardImage = null;
         var smallest = float.MaxValue;
 
         var images = _root.GetComponentsInChildren<Image>(true);
@@ -298,15 +302,7 @@ internal sealed class TabletPanel
             if (box.YMin > stats.YMin + tolerance || box.YMax < stats.YMax - tolerance) continue;
 
             card = rect;
-            cardImage = image;
             smallest = area;
-        }
-
-        if (cardImage != null)
-        {
-            var background = _content.GetComponent<Image>();
-            background.sprite = cardImage.sprite;
-            background.type = cardImage.type;
         }
         return card;
     }

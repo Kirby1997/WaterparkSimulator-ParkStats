@@ -226,8 +226,10 @@ public static class Pages
         var rows = new List<Row> { Row.Of(RowKind.Header, "Day", "Visitors", "Net", "Satisfaction") };
         foreach (var day in days.OrderByDescending(d => d.Day))
         {
+            // The game reports zero until it has a figure, so zero means none was recorded.
+            var satisfaction = day.Satisfaction > 0 ? day.Satisfaction : null;
             rows.Add(Row.Of(SignKind(day.Net),
-                Format.Count(day.Day), Format.Count(day.Visitors), Format.Signed(day.Net), Format.Percent(day.Satisfaction)));
+                Format.Count(day.Day), Format.Count(day.Visitors), Format.Signed(day.Net), Format.Percent(satisfaction)));
         }
         return rows;
     }

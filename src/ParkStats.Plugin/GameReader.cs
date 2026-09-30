@@ -15,11 +15,31 @@ internal sealed class GameReader
     private readonly ManualLogSource _log;
     private readonly HashSet<string> _reported = new();
     private Dictionary<string, int> _complaintBaseline;
+    private double? _capturedDaySatisfaction;
+    private int? _capturedDay;
 
     public GameReader(ManualLogSource log) => _log = log;
 
     /// <summary>Starts counting complaints from now; called when a day ends.</summary>
     public void ResetComplaintBaseline() => _complaintBaseline = null;
+
+    /// <summary>
+    /// Remembers the game's running satisfaction average for the day. Called just before the
+    /// game finalises or clears it, since a day is recorded around the same moment.
+    /// </summary>
+    public void CaptureDaySatisfaction(string moment)
+    {
+        var game = Ref("GameManager.Instance", () => GameManager.Instance);
+        if (game == null) return;
+
+        var leavers = Get("dailySatisfactionCount", () => game.dailySatisfactionCount) ?? 0;
+        var sum = Get("dailySatisfactionSum", () => game.dailySatisfactionSum) ?? 0;
+        if (leavers <= 0) return;
+
+        _capturedDaySatisfaction = Normalize.Fraction(sum / leavers);
+        _capturedDay = Get("CurrentDay", () => game.CurrentDay.Value);
+        _log.LogInfo($"Day {_capturedDay} satisfaction at {moment}: sum {Number(sum)} over {leavers} guests.");
+    }
 
     /// <param name="raw">When given, receives unprocessed values for the diagnostics file.</param>
     public ParkSnapshot Read(List<string> raw = null)
@@ -196,7 +216,7 @@ internal sealed class GameReader
                 CountIfLow(stats, "Toilet", data.ToiletNeed);
                 CountIfLow(stats, "Trash", data.TrashNeed);
                 var energy = data.EnergyNeed;
-                if (energy != null && energy.Value < energy.SatisfactionThreshold) Add(stats.Low, "Energy");
+                if (energy != null && energy.Value < energy.LowReactionThreshold) Add(stats.Low, "Energy");
 
                 if (data.IsLeavingPark) Add(leaving, Format.Reason(data.LeavingReason.ToString()));
 
@@ -205,8 +225,8 @@ internal sealed class GameReader
                     var fun = data.FunNeed;
                     Note(raw, $"Guest[{stats.Counted}]",
                         $"money {Number(data.Money)} fun {Number(fun.Value)} (min {Number(fun.MinValue)} max {Number(fun.MaxValue)} " +
-                        $"threshold {Number(fun.SatisfactionThreshold)}) toilet {Number(data.ToiletNeed.Value)} " +
-                        $"(threshold {Number(data.ToiletNeed.SatisfactionThreshold)}) happiness {Number(data.Happiness.Value)}");
+                        $"threshold {Number(fun.SatisfactionThreshold)} low {Number(fun.LowReactionThreshold)}) toilet {Number(data.ToiletNeed.Value)} " +
+                        $"(threshold {Number(data.ToiletNeed.SatisfactionThreshold)} low {Number(data.ToiletNeed.LowReactionThreshold)}) happiness {Number(data.Happiness.Value)}");
                 }
             }
 
@@ -230,9 +250,11 @@ internal sealed class GameReader
         return !data.IsStaff && !data.IsNPC && !data.IsDormant && data.DoesHaveTicket;
     }
 
+    // "Low" is the level at which a guest starts reacting to the need. The satisfaction
+    // threshold is far higher: it is where the guest stops looking to fill it.
     private static void CountIfLow(GuestStats stats, string need, AINeed value)
     {
-        if (value != null && value.Value < value.SatisfactionThreshold) Add(stats.Low, need);
+        if (value != null && value.Value < value.LowReactionThreshold) Add(stats.Low, need);
     }
 
     private IReadOnlyList<NeedStat> ReadNeeds(GameManager game, GuestStats guests, bool hasGuests)
@@ -257,7 +279,8 @@ internal sealed class GameReader
 
     /// <summary>
     /// The game's satisfaction figure for a whole day: its end-of-day snapshot when that exists,
-    /// otherwise its running average of the guests who have left so far.
+    /// otherwise its running average of the guests who have left so far, otherwise that average
+    /// as it stood before the game cleared it.
     /// </summary>
     private double? ReadDaySatisfaction(GameManager game, int? day)
     {
@@ -274,7 +297,9 @@ internal sealed class GameReader
             }
 
             var leavers = game.dailySatisfactionCount;
-            return leavers > 0 ? Normalize.Fraction(game.dailySatisfactionSum / leavers) : null;
+            if (leavers > 0) return Normalize.Fraction(game.dailySatisfactionSum / leavers);
+
+            return _capturedDay == day ? _capturedDaySatisfaction : null;
         }
         catch (Exception e)
         {

@@ -46,7 +46,9 @@ public sealed class Plugin : BasePlugin
         _reader = new GameReader(Log);
         Panel = new TabletPanel(Log, _reader, History, fontScale.Value, diagnostics.Value ? WriteDiagnostics : null);
 
-        new Harmony(Id).PatchAll(typeof(Hooks));
+        var harmony = new Harmony(Id);
+        harmony.PatchAll(typeof(Hooks));
+        Hooks.PatchPageToggle(harmony, Log);
         Log.LogInfo($"{Name} {Version} loaded");
     }
 
@@ -60,8 +62,11 @@ public sealed class Plugin : BasePlugin
         var record = DayRecord.From(park);
         History()?.Add(record);
         _reader.ResetComplaintBaseline();
-        Log.LogInfo($"Recorded day {record.Day}: income {Format.Money(record.Income)}, expenses {Format.Money(record.Expenses)}.");
+        Log.LogInfo($"Recorded day {record.Day}: income {Format.Money(record.Income)}, expenses {Format.Money(record.Expenses)}, " +
+                    $"satisfaction {Format.Percent(record.Satisfaction)}.");
     }
+
+    internal void CaptureDaySatisfaction(string moment) => _reader.CaptureDaySatisfaction(moment);
 
     internal void ReportOnce(string what, Exception e)
     {

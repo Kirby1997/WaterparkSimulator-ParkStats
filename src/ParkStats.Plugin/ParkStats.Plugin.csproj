@@ -37,7 +37,12 @@
   <Target Name="DeployPlugin" AfterTargets="Build">
     <ItemGroup>
       <DeployFiles Include="$(TargetDir)ParkStats.*.dll" />
+      <!-- When the mod is installed through r2modman it lives in <Team>-ParkStats; build over that copy. -->
+      <ManagedCopy Include="$(BepInExDir)\plugins\*-ParkStats\ParkStats.Plugin.dll" />
     </ItemGroup>
+    <PropertyGroup Condition="'@(ManagedCopy)' != ''">
+      <PluginDeployDir>%(ManagedCopy.RootDir)%(ManagedCopy.Directory)</PluginDeployDir>
+    </PropertyGroup>
     <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(PluginDeployDir)" />
     <Message Importance="high" Text="Deployed @(DeployFiles->'%(Filename)%(Extension)', ', ') to $(PluginDeployDir)" />
   </Target>

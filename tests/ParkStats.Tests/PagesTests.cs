@@ -345,6 +345,14 @@ public class PagesTests
     }
 
     [Fact]
+    public void History_treats_a_zero_satisfaction_figure_as_not_recorded()
+    {
+        var rows = Pages.History(new[] { new DayRecord { Day = 2, Visitors = 7, Income = 149, Expenses = -209, Satisfaction = 0 } });
+
+        Assert.Equal("2 | 7 | -60 | n/a", rows[1].Text);
+    }
+
+    [Fact]
     public void History_with_no_days_explains_when_it_starts()
     {
         Has(Pages.History(Array.Empty<DayRecord>()), RowKind.Muted, "History starts after the first full day");

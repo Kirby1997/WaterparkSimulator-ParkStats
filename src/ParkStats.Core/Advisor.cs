@@ -104,7 +104,7 @@ public static class Advisor
         var detail = $"{weakest.Name} satisfaction is {Format.Percent(average)}";
         if (weakest.GuestsCounted > 0)
         {
-            detail += $"; {weakest.GuestsBelowThreshold} of {weakest.GuestsCounted} guests are below their comfort level";
+            detail += $"; {weakest.GuestsBelowThreshold} of {weakest.GuestsCounted} guests are running low on it";
         }
         detail += ".";
         if (NeedHints.TryGetValue(weakest.Name, out var hint))
