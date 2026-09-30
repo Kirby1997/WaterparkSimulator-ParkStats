@@ -32,9 +32,10 @@ public sealed class Plugin : BasePlugin
         var enabled = Config.Bind("General", "Enabled", true, "Add the stats tabs to the tablet's Park Management page.");
         var fontScale = Config.Bind("General", "FontScale", 1f, "Multiplier for the text size in the stats tabs.");
         var historyDays = Config.Bind("General", "HistoryDays", 60, "How many days the History tab keeps.");
-        var diagnostics = Config.Bind("Debug", "WriteDiagnostics", true,
-            "Write BepInEx/config/ParkStats/diagnostics.txt when the Park Management page is first opened. " +
-            "It lists what the mod reads from the game and the page layout, for fixing the mod after game updates.");
+        var diagnostics = Config.Bind("Debug", "WriteDiagnostics", false,
+            "Write diagnostics.txt and method-addresses.txt to BepInEx/config/ParkStats when the Park Management " +
+            "page is opened. They list what the mod reads from the game and the page layout, for fixing the mod " +
+            "after game updates. Turn this on before reporting a problem.");
 
         if (!enabled.Value)
         {

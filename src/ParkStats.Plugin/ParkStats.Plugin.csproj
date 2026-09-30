@@ -43,6 +43,8 @@
     <PropertyGroup Condition="'@(ManagedCopy)' != ''">
       <PluginDeployDir>%(ManagedCopy.RootDir)%(ManagedCopy.Directory)</PluginDeployDir>
     </PropertyGroup>
+    <!-- A copy built before the mod was installed through r2modman would load as a duplicate. -->
+    <RemoveDir Directories="$(BepInExDir)\plugins\ParkStats" Condition="'@(ManagedCopy)' != ''" />
     <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(PluginDeployDir)" />
     <Message Importance="high" Text="Deployed @(DeployFiles->'%(Filename)%(Extension)', ', ') to $(PluginDeployDir)" />
   </Target>

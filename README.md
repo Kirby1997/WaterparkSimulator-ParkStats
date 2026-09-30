@@ -48,9 +48,9 @@ By hand: install BepInEx 6 (IL2CPP) for the game, then copy `ParkStats.Plugin.dl
 | `Enabled` | `true` | Add the tabs |
 | `FontScale` | `1` | Text size multiplier for the tabs |
 | `HistoryDays` | `60` | Days kept by the History tab |
-| `WriteDiagnostics` | `true` | Write `diagnostics.txt` and `method-addresses.txt` to `BepInEx/config/ParkStats/` when the page is opened |
+| `WriteDiagnostics` | `false` | Write `diagnostics.txt` and `method-addresses.txt` to `BepInEx/config/ParkStats/` when the page is opened |
 
-If the mod misbehaves after a game update, attach `diagnostics.txt` and `BepInEx/LogOutput.log` to an issue.
+If the mod misbehaves after a game update, set `WriteDiagnostics = true`, open the Park Management page once, and attach `diagnostics.txt` and `BepInEx/LogOutput.log` to an issue.
 
 ## Building
 
