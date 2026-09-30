@@ -260,56 +260,70 @@ public class PagesTests
     {
         AttractionCapacity = 78,
         Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+        Rides = new[]
+        {
+            new RideRow { Name = "Rusty Lounger", Category = "Loungers", Tier = 0, Raises = new[] { "Energy" }, Capacity = 1, UsersNow = 0 },
+            new RideRow { Name = "Wave Slide", Category = "Slides", Tier = 2, Raises = new[] { "Fun" }, Capacity = 1, UsersNow = 1, QueueLength = 3 },
+        },
         BuildOptions = new[]
         {
-            new BuildOption { Name = "Treasure Pool", Price = 4000, Capacity = 8, Owned = 2, Raises = new[] { "Fun" } },
-            new BuildOption { Name = "Sunbed Lounger", Price = 300, Capacity = 2, Owned = 17, Raises = new[] { "Energy" } },
-            new BuildOption { Name = "Hotdog Stand", Price = 1200, Capacity = 1, Raises = new[] { "Hunger" } },
-            new BuildOption { Name = "Mega Slide", Price = 9000, Capacity = 4, LockedBy = "prestige 5" },
-            new BuildOption { Name = "Palm Tree", Price = 50 },
+            new BuildOption { Name = "Rusty Lounger", Category = "Loungers", Tier = 0, Price = 20, Capacity = 1, Owned = 1, Raises = new[] { "Energy" } },
+            new BuildOption { Name = "Premium Double Lounger", Category = "Loungers", Tier = 3, Price = 400, Capacity = 2, Raises = new[] { "Energy" } },
+            new BuildOption { Name = "Wave Slide", Category = "Slides", Tier = 2, Price = 1500, Capacity = 1, IdealPrice = 30, Owned = 1, Raises = new[] { "Fun" } },
+            new BuildOption { Name = "Crew Challenge Slide", Category = "Slides", Tier = 4, Price = 3000, Capacity = 1, IdealPrice = 50, Raises = new[] { "Fun" } },
+            new BuildOption { Name = "Wooden Hot Tub", Category = "Hot tubs", Tier = 3, Price = 900, Capacity = 3, IdealPrice = 22, Raises = new[] { "Fun" } },
+            new BuildOption { Name = "Mega Slide", Category = "Slides", Tier = 5, Price = 9000, Capacity = 2, LockedBy = "prestige 5" },
         },
     };
 
     [Fact]
-    public void Build_shows_how_much_room_attractions_give_against_what_prestige_allows()
+    public void Build_starts_with_how_busy_whatever_serves_each_need_is()
     {
         var rows = Pages.Build(BuildPark);
 
-        Has(rows, RowKind.Header, "Room for visitors");
-        Has(rows, RowKind.Normal, "Attractions hold | 78");
-        Has(rows, RowKind.Normal, "Prestige 4 allows | 75");
-        Has(rows, RowKind.Normal, "Prestige 5 allows | 100");
+        Assert.Equal("Demand now | In use | Waiting | Verdict", rows[0].Text);
+        Has(rows, RowKind.Normal, "Energy | 0/1 | 0 | Plenty");
+        Has(rows, RowKind.Bad, "Fun | 1/1 | 3 | Short");
+        Has(rows, RowKind.Muted, "Thirst | - | - | None built");
     }
 
     [Fact]
-    public void Build_lists_the_cheapest_room_first()
-    {
-        var texts = Texts(Pages.Build(BuildPark));
-
-        var header = Array.IndexOf(texts, "Cheapest room to add");
-        Assert.True(header >= 0);
-        Assert.Equal("Sunbed Lounger | +2 for 300", texts[header + 1]);
-        Assert.Equal("Treasure Pool | +8 for 4,000", texts[header + 2]);
-        Assert.Equal("Hotdog Stand | +1 for 1,200", texts[header + 3]);
-    }
-
-    [Fact]
-    public void Build_lists_attractions_not_built_yet_with_what_they_raise()
+    public void Build_names_the_best_unlocked_building_of_each_type()
     {
         var rows = Pages.Build(BuildPark);
 
-        Has(rows, RowKind.Header, "Not built yet");
-        Has(rows, RowKind.Normal, "Hotdog Stand | 1,200, raises Hunger");
-        Assert.DoesNotContain(Texts(rows), t => t.StartsWith("Palm Tree"));
+        Has(rows, RowKind.Header, "Best you can build");
+        Has(rows, RowKind.Normal, "Slides: Crew Challenge Slide");
+        Has(rows, RowKind.Normal, "Hot tubs: Wooden Hot Tub (none built)");
+        Assert.DoesNotContain(Texts(rows), t => t.Contains("Mega Slide") && !t.StartsWith("Mega Slide"));
+    }
+
+    [Fact]
+    public void Build_lists_owned_kinds_that_have_a_better_version_unlocked()
+    {
+        var rows = Pages.Build(BuildPark);
+
+        Has(rows, RowKind.Header, "Better versions unlocked");
+        Has(rows, RowKind.Normal, "Rusty Lounger: Premium Double Lounger");
+        Has(rows, RowKind.Normal, "Wave Slide: Crew Challenge Slide");
+    }
+
+    [Fact]
+    public void Build_explains_the_visitor_limit_in_plain_words()
+    {
+        var rows = Pages.Build(BuildPark);
+
+        Has(rows, RowKind.Header, "Visitor limit");
+        Has(rows, RowKind.Normal, "Your attractions allow | 78");
+        Has(rows, RowKind.Normal, "Prestige 4 caps it at | 75");
+        Has(rows, RowKind.Normal, "Prestige 5 caps it at | 100");
+        Assert.DoesNotContain(Texts(rows), t => t.Contains("Cheapest"));
     }
 
     [Fact]
     public void Build_lists_what_is_still_locked_and_why()
     {
-        var rows = Pages.Build(BuildPark);
-
-        Has(rows, RowKind.Header, "Locked");
-        Has(rows, RowKind.Normal, "Mega Slide | prestige 5");
+        Has(Pages.Build(BuildPark), RowKind.Normal, "Mega Slide | prestige 5");
     }
 
     [Fact]

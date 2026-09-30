@@ -60,6 +60,8 @@ public static class Advisor
         AddNextStar(park, advice);
         AddVisitorRoom(park, advice);
         AddBuildMore(park, advice);
+        AddNeedDemand(park, advice);
+        AddUpgrades(park, advice);
         AddDecoration(park, advice);
         AddStaff(park, advice);
         AddTopComplaint(park, advice);
@@ -266,13 +268,13 @@ public static class Advisor
         {
             advice.Add(new Advice(Severity.Medium, "Attractions limit your visitors",
                 $"Your open attractions hold {room} visitors; prestige {prestige.Level} allows {allowed}. " +
-                $"{allowed - room} more places would fill it.{CheapestRoom(park.BuildOptions)}"));
+                $"{allowed - room} more places would fill it.{MostRoom(park.BuildOptions)}"));
         }
         else if (prestige.NextLevelMaxVisitors is { } next && room < next)
         {
             advice.Add(new Advice(Severity.Low, $"Build room for prestige {prestige.Level + 1}",
                 $"Prestige {prestige.Level + 1} allows {next} visitors; your attractions hold {room}. " +
-                $"{next - room} more places are needed to use it.{CheapestRoom(park.BuildOptions)}"));
+                $"{next - room} more places are needed to use it.{MostRoom(park.BuildOptions)}"));
         }
     }
 
@@ -307,15 +309,47 @@ public static class Advisor
         }
     }
 
-    private static string CheapestRoom(IReadOnlyList<BuildOption> options)
+    /// <summary>The unlocked attractions that take the most guests at once: the quickest way to add room.</summary>
+    private static string MostRoom(IReadOnlyList<BuildOption> options)
     {
-        var cheapest = options
-            .Where(o => o.LockedBy is null && o.Capacity > 0 && o.Price > 0)
-            .OrderBy(o => o.Price / o.Capacity)
+        var unlocked = options.Where(o => o.LockedBy is null && o.Capacity > 0).ToList();
+        if (unlocked.Count == 0) return "";
+
+        var largest = unlocked.Max(o => o.Capacity);
+        var roomiest = unlocked
+            .Where(o => o.Capacity * 2 >= largest)
+            .OrderByDescending(o => o.Capacity).ThenByDescending(o => o.Tier)
             .Take(NamesShown)
-            .Select(o => $"{o.Name} (+{o.Capacity} for {Format.Money(o.Price)})")
-            .ToList();
-        return cheapest.Count == 0 ? "" : $" Cheapest: {string.Join(", ", cheapest)}.";
+            .Select(o => $"{o.Name} (+{o.Capacity})");
+        return $" Most room per build: {string.Join(", ", roomiest)}.";
+    }
+
+    /// <summary>A need whose places are all taken: build more of what serves it, the best tier unlocked.</summary>
+    private static void AddNeedDemand(ParkSnapshot park, List<Advice> advice)
+    {
+        foreach (var demand in Demand.ByNeed(park))
+        {
+            if (demand.Verdict is not (DemandVerdict.Short or DemandVerdict.NearlyFull)) continue;
+
+            var detail = $"{demand.UsersNow}/{demand.Capacity} places in use";
+            if (demand.Waiting > 0) detail += $", {demand.Waiting} waiting";
+            detail += ".";
+            var best = Demand.BestUnlocked(park.BuildOptions, o => o.Raises.Contains(demand.Need));
+            if (best is not null) detail += $" Best unlocked for it: {best.Name} ({best.Capacity} at once).";
+
+            advice.Add(new Advice(Severity.Medium, $"Build more for {demand.Need}", detail));
+        }
+    }
+
+    private static void AddUpgrades(ParkSnapshot park, List<Advice> advice)
+    {
+        var upgrades = Demand.Upgrades(park);
+        if (upgrades.Count == 0) return;
+
+        var lines = upgrades.Take(NamesShown).Select(u =>
+            $"{(u.Count > 1 ? $"{u.Owned} x{u.Count}" : u.Owned)}: {u.Better.Name} is unlocked");
+        advice.Add(new Advice(Severity.Low, "Better versions unlocked",
+            string.Join("; ", lines) + ". Replacing old ones as they wear out raises what each place earns."));
     }
 
     private static void AddNextStar(ParkSnapshot park, List<Advice> advice)

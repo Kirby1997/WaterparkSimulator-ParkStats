@@ -38,6 +38,13 @@ public sealed record RideRow
     public int? StockLeft { get; init; }
     public int? StockCapacity { get; init; }
 
+    /// <summary>Its type ("Slides", "Loungers") and tier (the prestige level it needs), from the catalogue.</summary>
+    public string? Category { get; init; }
+    public int? Tier { get; init; }
+
+    /// <summary>The needs it raises when a guest uses it.</summary>
+    public IReadOnlyList<string> Raises { get; init; } = Array.Empty<string>();
+
     /// <summary>Guests using it right now, and how many it takes at once.</summary>
     public int? UsersNow { get; init; }
     public int? Capacity { get; init; }
@@ -65,6 +72,10 @@ public sealed record BuildOption
 {
     public string Name { get; init; } = "";
     public double Price { get; init; }
+
+    /// <summary>Its type ("Slides", "Loungers") and tier: the prestige level it needs.</summary>
+    public string? Category { get; init; }
+    public int Tier { get; init; }
 
     /// <summary>Visitors it adds room for: how many guests can use it at once.</summary>
     public int Capacity { get; init; }

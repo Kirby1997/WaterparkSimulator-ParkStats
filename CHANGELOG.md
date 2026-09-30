@@ -2,9 +2,9 @@
 
 ## 0.2.0
 
-- Build tab and advice on what earns: what one attraction of each kind earned over the last full day against its upkeep, how busy it is now, and how many days another one takes to pay for itself.
-- New Build tab: how many visitors the park's attractions have room for against what the prestige level allows, the cheapest attractions to add room with, attractions not built yet and what they raise, and what is still locked.
-- Advice when attractions, not prestige, are what limits visitors, and ahead of a new star when the park has too little room to use it.
+- New Build tab. Demand per need: how many of the places that serve it are in use and how many guests wait, rated from "Plenty" to "Short". What one attraction of each kind earned over the last full day against its upkeep. The best building of each type that is unlocked, owned types with a better version unlocked, the visitor limit, and what is still locked.
+- Advice on building: more for a need whose places are full, naming the best unlocked option; another of a kind that nets money and has guests waiting, with its payback time; kinds earning less than their upkeep; better versions unlocked; attractions rather than prestige limiting visitors, and too little room to use the next star.
+- The visitor cap is computed the way the game does it: the room the open attractions give, limited by prestige.
 
 ## 0.1.0
 

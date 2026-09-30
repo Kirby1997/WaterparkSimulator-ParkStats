@@ -11,7 +11,7 @@ The game's Park Management page shows the ticket price, the age split, a visitor
 | Money | Today's income and expenses by reason, income per visitor, what each kind of attraction has earned, balance, lifetime totals, loans, staff cost |
 | Rides | Attractions by kind: open, closed, broken or with a guest request waiting, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
 | Guests | Each need with its average and how many guests are under half, which attractions raise it, top complaints with their cause and where they happen, reasons for leaving |
-| Build | What one attraction of each kind earns against its upkeep and how busy it is, room for visitors against what prestige allows, the cheapest attractions to add room with, what is not built yet, what is locked |
+| Build | Demand per need (places in use and guests waiting, from "Plenty" to "Short"), what one attraction of each kind earns against its upkeep, the best unlocked building of each type, owned types with a better version unlocked, the visitor limit, what is locked |
 | History | Visitors, net result and satisfaction for past days |
 | Advice | A ranked list of what is holding the park back or losing sales: empty stands, queues, unused or underpriced attractions, the weakest need, and what the next star needs |
 

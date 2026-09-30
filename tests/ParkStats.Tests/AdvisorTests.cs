@@ -551,7 +551,7 @@ public class AdvisorTests
     }
 
     [Fact]
-    public void The_cheapest_room_is_suggested_first_and_only_from_what_can_be_built()
+    public void Room_advice_suggests_what_adds_the_most_room_not_the_cheapest()
     {
         var park = Healthy() with
         {
@@ -562,10 +562,9 @@ public class AdvisorTests
 
         var detail = Single(park, "limit your visitors").Detail;
 
-        // 150 per place against 500 per place.
-        Assert.True(detail.IndexOf("Sunbed Lounger (+2 for 300)") < detail.IndexOf("Treasure Pool (+8 for 4,000)"));
+        Assert.Contains("Treasure Pool (+8)", detail);
+        Assert.DoesNotContain("Sunbed Lounger", detail);
         Assert.DoesNotContain("Wooden Sauna", detail);
-        Assert.DoesNotContain("Palm Tree", detail);
     }
 
     [Fact]
@@ -641,6 +640,61 @@ public class AdvisorTests
         Assert.Contains("Wave Slide", advice.Detail);
         Assert.Contains("40", advice.Detail);
         Assert.Contains("70", advice.Detail);
+    }
+
+    [Fact]
+    public void A_need_whose_places_are_all_taken_gets_build_advice_with_the_best_unlocked_option()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Wave Slide", Category = "Slides", Tier = 2, Raises = new[] { "Fun" }, Capacity = 1, UsersNow = 1, QueueLength = 3, Cleanliness = 1, Durability = 1 },
+            },
+            BuildOptions = new[]
+            {
+                new BuildOption { Name = "Wave Slide", Category = "Slides", Tier = 2, Price = 1500, Capacity = 1, Raises = new[] { "Fun" } },
+                new BuildOption { Name = "Crew Challenge Slide", Category = "Slides", Tier = 4, Price = 3000, Capacity = 1, Raises = new[] { "Fun" } },
+            },
+        };
+
+        var advice = Single(park, "build more for fun");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("1/1", advice.Detail);
+        Assert.Contains("3 waiting", advice.Detail);
+        Assert.Contains("Crew Challenge Slide", advice.Detail);
+    }
+
+    [Fact]
+    public void A_need_with_plenty_of_free_places_gets_no_build_advice()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[] { new RideRow { Name = "Lounger", Raises = new[] { "Energy" }, Capacity = 2, UsersNow = 0, Cleanliness = 1, Durability = 1 } },
+        };
+
+        None(park, "build more for");
+    }
+
+    [Fact]
+    public void Owned_kinds_with_a_better_version_unlocked_are_pointed_out()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[] { new RideRow { Name = "Rusty Lounger", Category = "Loungers", Tier = 0, Cleanliness = 1, Durability = 1 } },
+            BuildOptions = new[]
+            {
+                new BuildOption { Name = "Rusty Lounger", Category = "Loungers", Tier = 0, Price = 20, Capacity = 1, IdealPrice = 1 },
+                new BuildOption { Name = "Premium Double Lounger", Category = "Loungers", Tier = 3, Price = 400, Capacity = 2, IdealPrice = 20 },
+            },
+        };
+
+        var advice = Single(park, "better versions");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("Rusty Lounger", advice.Detail);
+        Assert.Contains("Premium Double Lounger", advice.Detail);
     }
 
     [Fact]

@@ -715,18 +715,14 @@ internal sealed class GameReader
             var data = building.AttractionData;
             if (data == null) continue;
 
-            var raises = new List<string>();
-            var changes = data.StatChanges;
-            for (var i = 0; changes != null && i < changes.Length; i++)
-            {
-                var need = changes[i] == null || changes[i].Value <= 0 ? null : NeedName(changes[i].Target);
-                if (need != null && !raises.Contains(need)) raises.Add(need);
-            }
+            var raises = RaisesOf(data);
 
             entries.Add(new CatalogueEntry(building, new BuildOption
             {
                 Name = TranslateTerm(building.LocalizedNameKey) ?? building.name ?? pair.Key,
                 Price = building.Price,
+                Category = CategoryOf(building.Tags, raises),
+                Tier = building.PrestigeLevel,
                 Capacity = data.VisitorBonus,
                 IdealPrice = data.IdealPrice > 0 ? data.IdealPrice : null,
                 MaintenancePerDay = data.MaintenanceDailyPrice > 0 ? data.MaintenanceDailyPrice : null,
@@ -734,6 +730,47 @@ internal sealed class GameReader
             }));
         }
         return entries;
+    }
+
+    /// <summary>The needs a guest's use raises, from the stat changes the game applies.</summary>
+    private static List<string> RaisesOf(AttractionData data)
+    {
+        var raises = new List<string>();
+        var changes = data?.StatChanges;
+        for (var i = 0; changes != null && i < changes.Length; i++)
+        {
+            var need = changes[i] == null || changes[i].Value <= 0 ? null : NeedName(changes[i].Target);
+            if (need != null && !raises.Contains(need)) raises.Add(need);
+        }
+        return raises;
+    }
+
+    /// <summary>
+    /// The type of a building, from the game's building tags, for comparing tiers: a better
+    /// slide only replaces a slide. Refreshments are split by what they sell.
+    /// </summary>
+    private static string CategoryOf(BuildingTags tags, IReadOnlyList<string> raises)
+    {
+        bool Has(BuildingTags tag) => (tags & tag) != 0;
+
+        if (Has(BuildingTags.Hottub)) return "Hot tubs";
+        if (Has(BuildingTags.Sauna)) return "Saunas";
+        if (Has(BuildingTags.Slide)) return "Slides";
+        if (Has(BuildingTags.DivingBoard)) return "Diving boards";
+        if (Has(BuildingTags.Pool)) return "Pools";
+        if (Has(BuildingTags.Shower)) return "Showers";
+        if (Has(BuildingTags.Toilet)) return "Toilets";
+        if (Has(BuildingTags.TrashBin)) return "Bins";
+        if (Has(BuildingTags.Lounge)) return "Loungers";
+        if (Has(BuildingTags.Benches)) return "Benches";
+        if (Has(BuildingTags.Refreshments))
+        {
+            if (raises.Contains("Thirst")) return "Drinks";
+            if (raises.Contains("Hunger")) return "Food";
+            return "Shops";
+        }
+        if (Has(BuildingTags.Inflatables) || Has(BuildingTags.Inflatable)) return "Inflatables";
+        return null;
     }
 
     private static string TranslateTerm(string term)
@@ -797,6 +834,8 @@ internal sealed class GameReader
     private RideRow ReadRide(AttractionInteraction attraction, List<string> raw)
     {
         var name = RideName(attraction);
+        var raises = Ref("StatChanges", () => RaisesOf(attraction.AttractionData)) ?? new List<string>();
+        var building = Ref("BuildingSO", () => attraction.BuildingSO);
 
         var price = Get("CurrentPrice", () => (double)attraction.CurrentPrice);
         var ideal = Get("IdealPrice", () => (double)attraction.AttractionData.IdealPrice);
@@ -840,6 +879,9 @@ internal sealed class GameReader
             StockLeft = stockLeft,
             StockCapacity = stockCapacity,
             HasOpenRequest = HasOpenRequest(attraction),
+            Category = building == null ? null : Ref("Category", () => CategoryOf(building.Tags, raises)),
+            Tier = building == null ? null : Get("PrestigeLevel", () => building.PrestigeLevel),
+            Raises = raises,
             UsersNow = Get("NumCurrentUsers", () => attraction.NumCurrentUsers),
             Capacity = Get("MaxSimultaneousUsers", () => attraction.MaxSimultaneousUsers),
             BuildPrice = Get("BuildingSO.Price", () => (double)attraction.BuildingSO.Price) is { } buildPrice && buildPrice > 0 ? buildPrice : null,

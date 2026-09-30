@@ -185,10 +185,26 @@ public static class Pages
         return rows;
     }
 
-    /// <summary>What building would do for the park: room for visitors, and what is on offer.</summary>
+    /// <summary>What to build: where demand is, what earns, the best of each type, what is locked.</summary>
     public static IReadOnlyList<Row> Build(ParkSnapshot park)
     {
         var rows = new List<Row>();
+
+        // Whether a need is short of places is the first question before building for it.
+        if (park.Rides.Any(r => r.Raises.Count > 0))
+        {
+            rows.Add(Row.Of(RowKind.Header, "Demand now", "In use", "Waiting", "Verdict"));
+            foreach (var demand in Demand.ByNeed(park))
+            {
+                if (demand.Verdict == DemandVerdict.NoneBuilt)
+                {
+                    rows.Add(Row.Of(RowKind.Muted, demand.Need, Blank, Blank, Demand.Describe(demand.Verdict)));
+                    continue;
+                }
+                var kind = demand.Verdict is DemandVerdict.Short or DemandVerdict.NearlyFull ? RowKind.Bad : RowKind.Normal;
+                rows.Add(Row.Of(kind, demand.Need, $"{demand.UsersNow}/{demand.Capacity}", Format.Count(demand.Waiting), Demand.Describe(demand.Verdict)));
+            }
+        }
 
         var economics = AttractionEconomics.For(park);
         if (economics.Count > 0)
@@ -209,44 +225,48 @@ public static class Pages
             }
         }
 
+        var categories = park.BuildOptions.Select(o => o.Category).OfType<string>().Distinct().OrderBy(c => c, StringComparer.Ordinal);
+        var best = new List<Row>();
+        foreach (var category in categories)
+        {
+            var option = Demand.BestUnlocked(park.BuildOptions, o => o.Category == category);
+            if (option is null) continue;
+            var owned = park.Rides.Any(r => r.Category == category);
+            best.Add(Row.Of(RowKind.Normal, $"{category}: {option.Name}{(owned ? "" : " (none built)")}"));
+        }
+        if (best.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Best you can build"));
+            rows.AddRange(best);
+        }
+
+        var upgrades = Demand.Upgrades(park);
+        if (upgrades.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Better versions unlocked"));
+            foreach (var (owned, count, better) in upgrades)
+            {
+                // One line: both names in full, as a right-hand column would cut the new one short.
+                rows.Add(Row.Of(RowKind.Normal, $"{(count > 1 ? $"{owned} x{count}" : owned)}: {better.Name}"));
+            }
+        }
+
         if (park.AttractionCapacity is not null || park.Prestige?.MaxVisitors is not null)
         {
-            rows.Add(Row.Of(RowKind.Header, "Room for visitors"));
-            AddIfKnown(rows, "Attractions hold", park.AttractionCapacity);
+            rows.Add(Row.Of(RowKind.Header, "Visitor limit"));
+            AddIfKnown(rows, "Your attractions allow", park.AttractionCapacity);
             if (park.Prestige is { } prestige)
             {
-                AddIfKnown(rows, $"Prestige {prestige.Level} allows", prestige.MaxVisitors);
-                AddIfKnown(rows, $"Prestige {prestige.Level + 1} allows", prestige.NextLevelMaxVisitors);
+                AddIfKnown(rows, $"Prestige {prestige.Level} caps it at", prestige.MaxVisitors);
+                AddIfKnown(rows, $"Prestige {prestige.Level + 1} caps it at", prestige.NextLevelMaxVisitors);
             }
         }
 
-        // Only attractions add room; decoration is in the catalogue too but holds nobody.
-        var attractions = park.BuildOptions.Where(o => o.Capacity > 0 && o.Price > 0).ToList();
-        var buildable = attractions.Where(o => o.LockedBy is null).ToList();
-
-        var cheapest = buildable.OrderBy(o => o.Price / o.Capacity).Take(BuildOptionsShown).ToList();
-        if (cheapest.Count > 0)
-        {
-            rows.Add(Row.Of(RowKind.Header, "Cheapest room to add"));
-            foreach (var option in cheapest)
-            {
-                rows.Add(Row.Of(RowKind.Normal, ShortName(option.Name), $"+{option.Capacity} for {Format.Money(option.Price)}"));
-            }
-        }
-
-        var missing = buildable.Where(o => o.Owned == 0).OrderBy(o => o.Price).Take(BuildOptionsShown).ToList();
-        if (missing.Count > 0)
-        {
-            rows.Add(Row.Of(RowKind.Header, "Not built yet"));
-            foreach (var option in missing)
-            {
-                var detail = Format.Money(option.Price);
-                if (option.Raises.Count > 0) detail += $", raises {string.Join(", ", option.Raises)}";
-                rows.Add(Row.Of(RowKind.Normal, ShortName(option.Name), detail));
-            }
-        }
-
-        var locked = attractions.Where(o => o.LockedBy is not null).OrderBy(o => o.Price).Take(BuildOptionsShown).ToList();
+        var locked = park.BuildOptions
+            .Where(o => o.LockedBy is not null && o.Capacity > 0)
+            .OrderBy(o => o.Tier).ThenBy(o => o.Price)
+            .Take(BuildOptionsShown)
+            .ToList();
         if (locked.Count > 0)
         {
             rows.Add(Row.Of(RowKind.Header, "Locked"));
