@@ -290,7 +290,7 @@ public static class Pages
         {
             if (rows.Count > 0) rows.Add(Row.Of(RowKind.Normal, ""));
             rows.Add(Row.Of(TitleKind(item), item.Title));
-            rows.Add(Row.Of(RowKind.Muted, item.Detail));
+            rows.Add(Row.Of(RowKind.Normal, item.Detail));
         }
         return rows;
     }
@@ -375,6 +375,7 @@ public static class Pages
         _ => RowKind.Normal,
     };
 
+    // The title carries the colour; the explanation stays in ordinary text, the easiest to read.
     private static RowKind TitleKind(Advice advice) =>
-        advice.Severity == Severity.High ? RowKind.Bad : RowKind.Normal;
+        advice.Severity == Severity.High ? RowKind.Bad : RowKind.Header;
 }

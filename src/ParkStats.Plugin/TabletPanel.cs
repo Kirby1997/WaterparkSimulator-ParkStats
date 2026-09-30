@@ -23,6 +23,7 @@ internal sealed class TabletPanel
     private const int ParkTab = 0;
     private const long RefreshIntervalMs = 1000;
     private const float Padding = 12f;
+    private const float ContentPadding = 44f;
     private const float MinTabHeight = 36f;
     private const float MaxTabHeight = 80f;
     // Roughly how many characters of the widest table fit on one line.
@@ -161,7 +162,8 @@ internal sealed class TabletPanel
 
         var viewport = NewObject("Viewport", contentRect, layer);
         var viewportRect = viewport.GetComponent<RectTransform>();
-        Stretch(viewportRect, 24f);
+        // Clear of the card's border and rounded corners.
+        Stretch(viewportRect, ContentPadding);
         viewport.AddComponent<RectMask2D>();
 
         _text = NewText("Text", viewportRect, layer, template);

@@ -10,7 +10,7 @@ The game's Park Management page shows the ticket price, the age split, a visitor
 | Today | Net result so far, visitors, satisfaction, prestige, and the three most urgent things to do, each with its reason |
 | Money | Today's income and expenses by reason, income per visitor, what each kind of attraction has earned, balance, lifetime totals, loans, staff cost |
 | Rides | Attractions by kind: open, closed or broken, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
-| Guests | Each need with its average and how many guests are under half, which attractions raise it, what satisfaction does to visitor numbers, top complaints in the game's own words, reasons for leaving |
+| Guests | Each need with its average and how many guests are under half, which attractions raise it, what satisfaction does to visitor numbers, top complaints with their cause and where they happen, reasons for leaving |
 | History | Visitors, net result and satisfaction for past days |
 | Advice | A ranked list of what is holding the park back or losing sales: empty stands, queues, unused or underpriced attractions, the weakest need, and what the next star needs |
 
@@ -26,7 +26,7 @@ Things to know:
 
 - Most of the detail exists only on the host. When you join someone else's park, those values show as `n/a`.
 - History starts from the first full day played with the mod installed, and is kept per park name.
-- Complaints are counted from the moment the park is loaded.
+- Complaints, and the places they happen, are counted from the moment the park is loaded and start again each day.
 - The Money tab counts every change to your balance. The game's own end-of-day report leaves out miscellaneous income such as trash rewards, so the two can differ by that amount.
 - While the park is empty the game has no satisfaction readings, so needs show as `n/a`.
 - Advice about the ticket price is switched off until the meaning of the game's target price is confirmed.

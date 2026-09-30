@@ -26,6 +26,9 @@ internal static class Diagnostics
         foreach (var line in raw) sb.AppendLine(line);
         sb.AppendLine("park key = " + reader.ParkKey());
 
+        sb.AppendLine().AppendLine("== Recent complaints (thought | guest state | state before | attraction) ==");
+        foreach (var line in reader.Complaints.Recent) sb.AppendLine(line);
+
         if (park != null)
         {
             foreach (var tab in TabletPanel.ModTabs)

@@ -20,10 +20,21 @@ internal sealed class GameReader
     private double? _capturedDaySatisfaction;
     private int? _capturedDay;
 
-    public GameReader(ManualLogSource log) => _log = log;
+    public GameReader(ManualLogSource log)
+    {
+        _log = log;
+        Complaints = new ComplaintLog(RideName);
+    }
+
+    /// <summary>Where complaints have come up today.</summary>
+    public ComplaintLog Complaints { get; }
 
     /// <summary>Starts counting complaints from now; called when a day ends.</summary>
-    public void ResetComplaintBaseline() => _complaintBaseline = null;
+    public void ResetComplaintBaseline()
+    {
+        _complaintBaseline = null;
+        Complaints.Reset();
+    }
 
     /// <summary>
     /// Remembers the game's running satisfaction average for the day. Called just before the
@@ -107,6 +118,7 @@ internal sealed class GameReader
             StaffCapacity = staff == null ? null : Get("CurrentMaxStaffCapacity", () => staff.CurrentMaxStaffCapacity.Value),
             StaffSalary = staff == null || !isHost ? null : Get("CalculateStaffSalary", () => (double)staff.CalculateStaffSalary()),
             StaffTax = staff == null || !isHost ? null : Get("CalculateStaffTax", () => (double)staff.CalculateStaffTax()),
+            StaffTaxPerExtra = staff == null || !isHost ? null : Get("CalculateStaffOverCap", () => (double)staff.CalculateStaffOverCap()),
         };
 
         if (raw != null) NoteUnverified(game, finance, attractions, raw);
@@ -382,7 +394,7 @@ internal sealed class GameReader
                 Note(raw, $"Mission[{i}]", $"{mission.MissionSO?.MissionID} stage {mission.CurrentStage?.StageIndex} raises prestige {raises} task \"{text}\"");
                 if (raw != null) NoteConditions(mission, raw);
 
-                if (raises && task == null) task = text;
+                if (raises && task == null) task = RemainingConditions(mission) ?? text;
             }
             return task;
         }
@@ -406,6 +418,43 @@ internal sealed class GameReader
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// What is left of a mission's current stage, e.g. "1 of 4 tasks left: Earn money:
+    /// $489787/500000". Nothing when the conditions cannot be read.
+    /// </summary>
+    private string RemainingConditions(MissionData mission)
+    {
+        try
+        {
+            var all = new List<string>();
+            var left = new List<string>();
+            var transitions = mission.CurrentStage?.Transitions;
+            for (var i = 0; transitions != null && i < transitions.Count; i++)
+            {
+                var conditions = transitions[i]?.Conditions;
+                for (var j = 0; conditions != null && j < conditions.Count; j++)
+                {
+                    var condition = conditions[j];
+                    var text = condition?.GetTaskText()?.Trim();
+                    if (string.IsNullOrEmpty(text) || all.Contains(text)) continue;
+
+                    all.Add(text);
+                    if (!condition._hasPassed) left.Add(text);
+                }
+            }
+
+            if (all.Count == 0) return null;
+            return left.Count == 0
+                ? "every task is done."
+                : $"{left.Count} of {all.Count} tasks left: {string.Join("; ", left)}";
+        }
+        catch (Exception e)
+        {
+            Report("Mission conditions", e);
+            return null;
+        }
     }
 
     private void NoteConditions(MissionData mission, List<string> raw)
@@ -516,27 +565,31 @@ internal sealed class GameReader
 
             // The game counts every thought; complaints are the ones that lower mood.
             var current = new Dictionary<string, int>();
-            var notes = new Dictionary<string, string>();
+            var thoughtNames = new Dictionary<string, string>();
             for (var i = 0; i < thoughts.Count; i++)
             {
                 var thought = thoughts[i];
                 if (thought == null || thought.MoodEffect >= 0) continue;
 
                 var label = Format.Reason(thought.Type.ToString());
-                // What the guest thinks, as the game words it in the player's language.
-                var said = Translate(thought.LocalizedName);
-                var why = Translate(thought.LocalizedDescription);
-                var note = string.Join(" ", new[] { said, why }.Where(t => t != null));
-                if (note.Length > 0) notes[label] = note;
-                Note(raw, $"Thought {thought.Type}", $"mood {Number(thought.MoodEffect)} name \"{said}\" description \"{why}\"");
+                thoughtNames[label] = thought.Type.ToString();
+                if (raw != null)
+                {
+                    Note(raw, $"Thought {thought.Type}",
+                        $"mood {Number(thought.MoodEffect)} name \"{Translate(thought.LocalizedName)}\" description \"{Translate(thought.LocalizedDescription)}\"");
+                }
 
                 if (occurrences.TryGetValue(thought.Type, out var count) && count > 0) current[label] = count;
             }
             Note(raw, "Complaint totals", string.Join(", ", current.Select(p => $"{p.Key}={p.Value}")));
 
             _complaintBaseline ??= current;
+            // The game's own text for a thought is only what the guest says. What lies behind
+            // it, and where it has been happening, is what the player can act on.
             return Normalize.Since(_complaintBaseline, current)
-                .Select(line => notes.TryGetValue(line.Label, out var note) ? line with { Note = note } : line)
+                .Select(line => thoughtNames.TryGetValue(line.Label, out var thought)
+                    ? line with { Note = ComplaintHints.Note(thought, Complaints.Places(thought)) }
+                    : line)
                 .ToList();
         }
         catch (Exception e)
@@ -561,7 +614,7 @@ internal sealed class GameReader
         }
     }
 
-    private string RideName(AttractionInteraction attraction)
+    public string RideName(AttractionInteraction attraction)
     {
         var name = Ref("Building.GetName", () => attraction.Building?.GetName())
             ?? Ref("Attraction.name", () => attraction.name)

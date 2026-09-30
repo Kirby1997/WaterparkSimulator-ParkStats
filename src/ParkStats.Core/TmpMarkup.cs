@@ -29,7 +29,8 @@ public static class TmpMarkup
             if (i > 0)
             {
                 text.Append('\n');
-                if (row.Kind == RowKind.Header) text.Append('\n');
+                // A gap above each header, unless the row before it is already a blank one.
+                if (row.Kind == RowKind.Header && !IsBlank(rows[i - 1])) text.Append('\n');
             }
 
             var (open, close) = Wrap(row.Kind);
@@ -47,6 +48,8 @@ public static class TmpMarkup
         return text.ToString();
     }
 
+    private static bool IsBlank(Row row) => row.Cells.All(string.IsNullOrEmpty);
+
     private static int ColumnStart(int cellCount, int cell) =>
         Columns.TryGetValue(cellCount, out var starts) ? starts[cell - 1] : cell * 100 / cellCount;
 
@@ -55,7 +58,7 @@ public static class TmpMarkup
         RowKind.Header => ("<color=#F2A900><b>", "</b></color>"),
         RowKind.Good => ("<color=#1FAF5A>", "</color>"),
         RowKind.Bad => ("<color=#E0433F>", "</color>"),
-        RowKind.Muted => ("<color=#5F86AD>", "</color>"),
+        RowKind.Muted => ("<color=#2E6DB4>", "</color>"),
         _ => ("", ""),
     };
 

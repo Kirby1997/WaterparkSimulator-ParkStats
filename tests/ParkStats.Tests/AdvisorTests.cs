@@ -241,40 +241,6 @@ public class AdvisorTests
     }
 
     [Fact]
-    public void A_visitor_cap_well_below_what_prestige_allows_is_reported()
-    {
-        var park = Healthy() with
-        {
-            MaxVisitors = 6,
-            RecentSatisfaction = 0.37,
-            Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10 },
-        };
-
-        var advice = Single(park, "visitor cap");
-
-        Assert.Equal(Severity.Medium, advice.Severity);
-        Assert.Contains("6", advice.Detail);
-        Assert.Contains("10", advice.Detail);
-        Assert.Contains("37%", advice.Detail);
-    }
-
-    [Fact]
-    public void A_visitor_cap_close_to_the_prestige_limit_is_not_reported()
-    {
-        var park = Healthy() with { MaxVisitors = 9, Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10 } };
-
-        None(park, "visitor cap");
-    }
-
-    [Fact]
-    public void At_the_top_prestige_level_there_is_no_prestige_advice()
-    {
-        var park = Healthy() with { MaxVisitors = 200, Prestige = new PrestigeInfo { Level = 6, MaxVisitors = 200 } };
-
-        None(park, "prestige");
-    }
-
-    [Fact]
     public void Low_decoration_is_reported()
     {
         var park = Healthy() with { Prestige = new PrestigeInfo { DecorationLevel = 0.2 } };
@@ -334,52 +300,6 @@ public class AdvisorTests
         };
 
         None(park, "staff cost");
-    }
-
-    [Fact]
-    public void More_staff_than_capacity_is_reported_with_what_it_costs()
-    {
-        var park = Healthy() with { StaffCount = 6, StaffCapacity = 4, StaffTax = 240 };
-
-        var advice = Single(park, "staff over capacity");
-
-        Assert.Contains("6 staff", advice.Detail);
-        Assert.Contains("capacity of 4", advice.Detail);
-        Assert.Contains("240", advice.Detail);
-        Assert.Contains("let 2 go", advice.Detail);
-    }
-
-    [Fact]
-    public void At_the_prestige_limit_the_next_level_is_pointed_out()
-    {
-        var park = Healthy() with
-        {
-            Visitors = 5,
-            MaxVisitors = 10,
-            Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10, NextLevelMaxVisitors = 20 },
-        };
-
-        var advice = Single(park, "prestige limit");
-
-        Assert.Equal(Severity.Low, advice.Severity);
-        Assert.Contains("20", advice.Detail);
-    }
-
-    [Fact]
-    public void A_full_park_at_the_prestige_limit_is_told_what_the_next_star_needs()
-    {
-        var park = Healthy() with
-        {
-            Visitors = 71,
-            MaxVisitors = 75,
-            NextStarTask = "Reach 5000 decoration points",
-            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
-        };
-
-        var advice = Single(park, "prestige limit");
-
-        Assert.Equal(Severity.Medium, advice.Severity);
-        Assert.Contains("Reach 5000 decoration points", advice.Detail);
     }
 
     [Fact]
@@ -493,6 +413,95 @@ public class AdvisorTests
         };
 
         None(park, "unused");
+    }
+
+    [Fact]
+    public void Satisfaction_that_cuts_visitor_numbers_is_reported_with_the_games_multiplier()
+    {
+        var park = Healthy() with { RecentSatisfaction = 0.5, VisitorMultiplier = 0.72, BestVisitorMultiplier = 1.2 };
+
+        var advice = Single(park, "satisfaction");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("costing", advice.Title);
+        Assert.Contains("50%", advice.Detail);
+        Assert.Contains("x0.72", advice.Detail);
+        Assert.Contains("x1.20", advice.Detail);
+    }
+
+    [Fact]
+    public void Satisfaction_with_room_to_add_visitors_is_a_low_priority()
+    {
+        var park = Healthy() with { RecentSatisfaction = 0.7, VisitorMultiplier = 1.0, BestVisitorMultiplier = 1.2 };
+
+        var advice = Single(park, "satisfaction");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("x1.00", advice.Detail);
+        Assert.Contains("x1.20", advice.Detail);
+    }
+
+    [Fact]
+    public void Satisfaction_already_at_the_best_multiplier_is_not_reported()
+    {
+        var park = Healthy() with { RecentSatisfaction = 1, VisitorMultiplier = 1.2, BestVisitorMultiplier = 1.2 };
+
+        None(park, "satisfaction");
+    }
+
+    [Fact]
+    public void The_next_star_says_what_is_still_to_do_and_what_it_brings()
+    {
+        var park = Healthy() with
+        {
+            Visitors = 30,
+            MaxVisitors = 75,
+            NextStarTask = "Earn money: $489787/500000",
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+        };
+
+        var advice = Single(park, "next star");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("Earn money: $489787/500000", advice.Detail);
+        Assert.Contains("75", advice.Detail);
+        Assert.Contains("100", advice.Detail);
+    }
+
+    [Fact]
+    public void The_next_star_matters_more_when_the_park_is_full()
+    {
+        var park = Healthy() with
+        {
+            Visitors = 71,
+            MaxVisitors = 75,
+            NextStarTask = "Earn money: $489787/500000",
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+        };
+
+        Assert.Equal(Severity.Medium, Single(park, "next star").Severity);
+    }
+
+    [Fact]
+    public void Without_a_star_task_there_is_no_next_star_advice()
+    {
+        var park = Healthy() with { Prestige = new PrestigeInfo { Level = 6, MaxVisitors = 200 } };
+
+        None(park, "next star");
+    }
+
+    [Fact]
+    public void More_staff_than_capacity_is_reported_with_what_each_extra_costs()
+    {
+        var park = Healthy() with { StaffCount = 6, StaffCapacity = 4, StaffTax = 907, StaffTaxPerExtra = 453 };
+
+        var advice = Single(park, "staff over capacity");
+
+        Assert.Contains("6 staff", advice.Detail);
+        Assert.Contains("capacity of 4", advice.Detail);
+        Assert.Contains("907", advice.Detail);
+        Assert.Contains("453 each", advice.Detail);
+        Assert.Contains("let 2 go", advice.Detail);
     }
 
     [Fact]

@@ -462,8 +462,9 @@ public class PagesTests
         Assert.Equal(
             new[] { "Repair broken rides", "Big Slide: malfunctioning.", "", "Top complaint", "\"Too pricey\" (3 times)." },
             Texts(rows));
+        // Titles stand out by colour; the explanation is ordinary text, the easiest to read.
         Assert.Equal(
-            new[] { RowKind.Bad, RowKind.Muted, RowKind.Normal, RowKind.Normal, RowKind.Muted },
+            new[] { RowKind.Bad, RowKind.Normal, RowKind.Normal, RowKind.Header, RowKind.Normal },
             rows.Select(r => r.Kind));
     }
 
@@ -528,9 +529,9 @@ public class PagesTests
 
         Has(rows, RowKind.Header, "Do next");
         Has(rows, RowKind.Bad, "First");
-        Has(rows, RowKind.Muted, "a");
-        Has(rows, RowKind.Normal, "Third");
-        Has(rows, RowKind.Muted, "c");
+        Has(rows, RowKind.Normal, "a");
+        Has(rows, RowKind.Header, "Third");
+        Has(rows, RowKind.Normal, "c");
         Assert.DoesNotContain("Fourth", Texts(rows));
         Assert.DoesNotContain("d", Texts(rows));
     }

@@ -103,4 +103,7 @@ public sealed record ParkSnapshot
     public int? StaffCapacity { get; init; }
     public double? StaffSalary { get; init; }
     public double? StaffTax { get; init; }
+
+    /// <summary>Staff tax added by each member of staff over capacity.</summary>
+    public double? StaffTaxPerExtra { get; init; }
 }

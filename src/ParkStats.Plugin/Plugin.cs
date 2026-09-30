@@ -66,6 +66,8 @@ public sealed class Plugin : BasePlugin
                     $"satisfaction {Format.Percent(record.Satisfaction)}.");
     }
 
+    internal void RecordThought(VisitorThoughtsSystem system, VisitorThoughtType type) => _reader.Complaints.Record(system, type);
+
     internal void CaptureDaySatisfaction(string moment) => _reader.CaptureDaySatisfaction(moment);
 
     internal void ReportOnce(string what, Exception e)

@@ -47,6 +47,27 @@ internal static class Hooks
         }
     }
 
+    // Where a guest is when a complaint comes up. Both overloads are hooked; the log drops the repeat.
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(VisitorThoughtsSystem), nameof(VisitorThoughtsSystem.AddThought), typeof(VisitorThoughtType), typeof(bool))]
+    private static void BeforeThought(VisitorThoughtsSystem __instance, VisitorThoughtType type) => Thought(__instance, type);
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(VisitorThoughtsSystem), nameof(VisitorThoughtsSystem.AddThought), typeof(VisitorThoughtType), typeof(float), typeof(bool))]
+    private static void BeforeThoughtWithValue(VisitorThoughtsSystem __instance, VisitorThoughtType type) => Thought(__instance, type);
+
+    private static void Thought(VisitorThoughtsSystem system, VisitorThoughtType type)
+    {
+        try
+        {
+            Plugin.Instance.RecordThought(system, type);
+        }
+        catch (Exception e)
+        {
+            Plugin.Instance.ReportOnce("thought hook", e);
+        }
+    }
+
     // The game clears its running satisfaction average around the end of the day.
     [HarmonyPrefix]
     [HarmonyPatch(typeof(GameManager), nameof(GameManager.FinalizeDailySatisfaction))]

@@ -25,7 +25,6 @@ public static class Advisor
     private const double NearFull = 0.9;
     private const double TicketTolerance = 0.1;
     private const double RidePriceTolerance = 0.2;
-    private const double VisitorCapShortfall = 0.8;
     private const double DecorationLowBelow = 0.5;
     private const double StaffCostShare = 0.5;
     private const int NamesShown = 3;
@@ -56,7 +55,8 @@ public static class Advisor
         AddTicketPrice(park, advice);
         AddRidePricing(park, advice);
         AddUnused(park, advice);
-        AddVisitorCap(park, advice);
+        AddSatisfactionMultiplier(park, advice);
+        AddNextStar(park, advice);
         AddDecoration(park, advice);
         AddStaff(park, advice);
         AddTopComplaint(park, advice);
@@ -221,33 +221,38 @@ public static class Advisor
         }
     }
 
-    private static void AddVisitorCap(ParkSnapshot park, List<Advice> advice)
+    /// <summary>
+    /// The game multiplies the visitor cap by a factor read off recent satisfaction: below
+    /// one when guests have been unhappy, above one when they have been very happy.
+    /// </summary>
+    private static void AddSatisfactionMultiplier(ParkSnapshot park, List<Advice> advice)
     {
-        if (park.MaxVisitors is not { } cap) return;
-        if (park.Prestige is not { MaxVisitors: { } allowed } prestige || allowed <= 0) return;
+        if (park.VisitorMultiplier is not { } multiplier || park.BestVisitorMultiplier is not { } best) return;
+        if (multiplier >= best - 0.005) return;
 
-        if (cap < allowed * VisitorCapShortfall)
-        {
-            var detail = $"The park admits up to {cap} visitors; prestige {prestige.Level} allows {allowed}. " +
-                         "Attractions and recent guest satisfaction decide how much of that you get.";
-            if (park.RecentSatisfaction is { } recent)
-            {
-                detail += $" Recent satisfaction is {Format.Percent(recent)}.";
-            }
-            advice.Add(new Advice(Severity.Medium, "Visitor cap is low", detail));
-        }
-        else if (cap >= allowed && prestige.NextLevelMaxVisitors is { } next)
-        {
-            var detail = $"{cap} visitors is the most prestige {prestige.Level} allows. Prestige {prestige.Level + 1} allows {next}.";
-            if (!string.IsNullOrWhiteSpace(park.NextStarTask))
-            {
-                detail += $" For the next star: {park.NextStarTask}";
-            }
+        var satisfaction = park.RecentSatisfaction is { } recent ? $"Recent satisfaction of {Format.Percent(recent)}" : "Recent satisfaction";
+        var detail = $"{satisfaction} puts the game's visitor multiplier at {Format.Multiplier(multiplier)}. " +
+                     $"The best is {Format.Multiplier(best)}. Raising the weakest needs lifts it.";
 
-            // Only a park that actually fills up is held back by this.
-            var full = park.Visitors >= cap * NearFull;
-            advice.Add(new Advice(full ? Severity.Medium : Severity.Low, "Prestige limit reached", detail));
+        advice.Add(multiplier < 1
+            ? new Advice(Severity.Medium, "Low satisfaction is costing visitors", detail)
+            : new Advice(Severity.Low, "Higher satisfaction brings more visitors", detail));
+    }
+
+    private static void AddNextStar(ParkSnapshot park, List<Advice> advice)
+    {
+        if (string.IsNullOrWhiteSpace(park.NextStarTask)) return;
+
+        var detail = "";
+        if (park.Prestige is { MaxVisitors: { } allowed, NextLevelMaxVisitors: { } next } prestige)
+        {
+            detail = $"Prestige {prestige.Level + 1} raises the visitor base from {allowed} to {next}. ";
         }
+        detail += $"Still to do: {park.NextStarTask}";
+
+        // A park that fills up is held back by its star more than by anything else.
+        var full = park.Visitors is { } visitors && park.MaxVisitors is { } cap && cap > 0 && visitors >= cap * NearFull;
+        advice.Add(new Advice(full ? Severity.Medium : Severity.Low, "Next star", detail));
     }
 
     private static void AddDecoration(ParkSnapshot park, List<Advice> advice)
@@ -266,7 +271,9 @@ public static class Advisor
             var detail = $"{count} staff for a capacity of {capacity}.";
             if (park.StaffTax > 0)
             {
-                detail += $" Staff over capacity are taxed: {Format.Money(park.StaffTax)} a day at the moment.";
+                detail += $" The {over} extra cost {Format.Money(park.StaffTax)} a day in staff tax";
+                if (park.StaffTaxPerExtra > 0) detail += $" ({Format.Money(park.StaffTaxPerExtra)} each)";
+                detail += ".";
             }
             detail += $" Expand staff capacity or let {over} go.";
             advice.Add(new Advice(Severity.Medium, "Staff over capacity", detail));
