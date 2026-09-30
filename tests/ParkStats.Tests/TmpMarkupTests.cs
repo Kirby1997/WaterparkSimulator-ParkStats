@@ -31,9 +31,9 @@ public class TmpMarkupTests
     }
 
     [Theory]
-    [InlineData(RowKind.Good, "#5CFF8F")]
-    [InlineData(RowKind.Bad, "#FF6B6B")]
-    [InlineData(RowKind.Muted, "#9AD7FF")]
+    [InlineData(RowKind.Good, "#1FAF5A")]
+    [InlineData(RowKind.Bad, "#E0433F")]
+    [InlineData(RowKind.Muted, "#5F86AD")]
     public void Coloured_kinds_wrap_the_line_in_a_colour(RowKind kind, string colour)
     {
         Assert.Equal($"<color={colour}>Net<pos=62%>+5</color>", Render(Row.Of(kind, "Net", "+5")));
@@ -42,7 +42,7 @@ public class TmpMarkupTests
     [Fact]
     public void A_header_is_bold_and_coloured()
     {
-        Assert.Equal("<color=#FFD84A><b>Today</b></color>", Render(Row.Of(RowKind.Header, "Today")));
+        Assert.Equal("<color=#F2A900><b>Today</b></color>", Render(Row.Of(RowKind.Header, "Today")));
     }
 
     [Fact]
@@ -50,13 +50,13 @@ public class TmpMarkupTests
     {
         var text = Render(Row.Of(RowKind.Normal, "One"), Row.Of(RowKind.Header, "Loans"));
 
-        Assert.Equal("One\n\n<color=#FFD84A><b>Loans</b></color>", text);
+        Assert.Equal("One\n\n<color=#F2A900><b>Loans</b></color>", text);
     }
 
     [Fact]
     public void Angle_brackets_in_cell_text_cannot_inject_tags()
     {
-        Assert.Equal("size=200Big", Render(Row.Of(RowKind.Normal, "<size=200>Big")));
+        Assert.Equal("Big 3  5", Render(Row.Of(RowKind.Normal, "<size=200>Big</size> 3 < 5")));
     }
 
     [Fact]

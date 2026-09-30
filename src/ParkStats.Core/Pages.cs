@@ -64,14 +64,7 @@ public static class Pages
         }
 
         rows.Add(Row.Of(RowKind.Header, "Do next"));
-        if (advice.Count == 0)
-        {
-            rows.Add(Row.Of(RowKind.Good, NothingToFix));
-        }
-        foreach (var item in advice.Take(OverviewAdviceShown))
-        {
-            rows.Add(Row.Of(TitleKind(item), item.Title));
-        }
+        rows.AddRange(Advisor(advice.Take(OverviewAdviceShown).ToList()));
 
         return rows;
     }
@@ -173,10 +166,10 @@ public static class Pages
 
         if (park.Needs.Count > 0)
         {
-            rows.Add(Row.Of(RowKind.Header, "Need", "Average", "Guests low"));
+            rows.Add(Row.Of(RowKind.Header, "Need", "Average", "Under 50%"));
             foreach (var need in park.Needs)
             {
-                var low = need.GuestsCounted > 0 ? $"{need.GuestsBelowThreshold}/{need.GuestsCounted}" : Blank;
+                var low = need.GuestsCounted > 0 ? $"{need.GuestsLow}/{need.GuestsCounted}" : Blank;
                 rows.Add(Row.Of(NeedKind(need.Average), need.Name, Format.Percent(need.Average), low));
             }
         }
@@ -203,6 +196,34 @@ public static class Pages
         {
             rows.Add(Row.Of(RowKind.Header, "Guests"));
             rows.AddRange(counts);
+        }
+
+        var raised = park.Needs.Where(n => n.Sources.Count > 0).ToList();
+        if (raised.Count > 0)
+        {
+            rows.Add(Row.Of(RowKind.Header, "Raised by"));
+            foreach (var need in raised)
+            {
+                rows.Add(Row.Of(RowKind.Normal, $"{need.Name}: {string.Join(", ", need.Sources)}"));
+            }
+        }
+
+        if (park.RecentSatisfaction is not null || park.VisitorMultiplier is not null)
+        {
+            rows.Add(Row.Of(RowKind.Header, "What satisfaction buys"));
+            if (park.RecentSatisfaction is not null)
+            {
+                rows.Add(Row.Of(RowKind.Normal, "Recent satisfaction", Format.Percent(park.RecentSatisfaction)));
+            }
+            if (park.VisitorMultiplier is { } multiplier)
+            {
+                var text = Format.Multiplier(multiplier);
+                if (park.BestVisitorMultiplier is { } best && best > multiplier)
+                {
+                    text += $" ({Format.Multiplier(best)} at best)";
+                }
+                rows.Add(Row.Of(RowKind.Normal, "Visitor multiplier", text));
+            }
         }
 
         AddCounts(rows, "Top complaints", park.Complaints, ComplaintsShown);
@@ -302,6 +323,7 @@ public static class Pages
         foreach (var line in top)
         {
             rows.Add(Row.Of(RowKind.Normal, line.Label, Format.Count(line.Count)));
+            if (!string.IsNullOrWhiteSpace(line.Note)) rows.Add(Row.Of(RowKind.Muted, line.Note));
         }
     }
 

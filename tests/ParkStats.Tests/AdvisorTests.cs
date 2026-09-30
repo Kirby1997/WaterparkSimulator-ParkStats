@@ -267,21 +267,6 @@ public class AdvisorTests
     }
 
     [Fact]
-    public void At_the_prestige_limit_the_next_level_is_pointed_out()
-    {
-        var park = Healthy() with
-        {
-            MaxVisitors = 10,
-            Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10, NextLevelMaxVisitors = 20 },
-        };
-
-        var advice = Single(park, "prestige limit");
-
-        Assert.Equal(Severity.Low, advice.Severity);
-        Assert.Contains("20", advice.Detail);
-    }
-
-    [Fact]
     public void At_the_top_prestige_level_there_is_no_prestige_advice()
     {
         var park = Healthy() with { MaxVisitors = 200, Prestige = new PrestigeInfo { Level = 6, MaxVisitors = 200 } };
@@ -327,14 +312,9 @@ public class AdvisorTests
     }
 
     [Fact]
-    public void Staff_costing_more_than_half_of_todays_income_is_reported()
+    public void Staff_costing_more_than_half_of_a_typical_days_income_is_reported()
     {
-        var park = Healthy() with
-        {
-            MoneyToday = new[] { new MoneyLine("Ticket", 1000) },
-            StaffSalary = 500,
-            StaffTax = 100,
-        };
+        var park = Healthy() with { TypicalDayIncome = 1000, StaffSalary = 500, StaffTax = 100 };
 
         var advice = Single(park, "staff cost");
 
@@ -343,23 +323,85 @@ public class AdvisorTests
     }
 
     [Fact]
-    public void A_loan_does_not_count_as_income_when_judging_staff_cost()
+    public void Staff_cost_is_not_judged_against_a_day_that_has_only_just_started()
     {
+        // Early in the day income is near zero, so income-so-far would always look too small.
         var park = Healthy() with
         {
-            MoneyToday = new[] { new MoneyLine("Ticket", 1000), new MoneyLine("Loan", 5000) },
-            StaffSalary = 600,
+            TypicalDayIncome = null,
+            MoneyToday = new[] { new MoneyLine("Ticket", 50) },
+            StaffSalary = 2400,
         };
 
-        Assert.Contains("60%", Single(park, "staff cost").Detail);
+        None(park, "staff cost");
     }
 
     [Fact]
-    public void More_staff_than_capacity_is_reported()
+    public void More_staff_than_capacity_is_reported_with_what_it_costs()
     {
-        var park = Healthy() with { StaffCount = 8, StaffCapacity = 6 };
+        var park = Healthy() with { StaffCount = 6, StaffCapacity = 4, StaffTax = 240 };
 
-        Assert.Contains("8/6", Single(park, "staff over capacity").Detail);
+        var advice = Single(park, "staff over capacity");
+
+        Assert.Contains("6 staff", advice.Detail);
+        Assert.Contains("capacity of 4", advice.Detail);
+        Assert.Contains("240", advice.Detail);
+        Assert.Contains("let 2 go", advice.Detail);
+    }
+
+    [Fact]
+    public void At_the_prestige_limit_the_next_level_is_pointed_out()
+    {
+        var park = Healthy() with
+        {
+            Visitors = 5,
+            MaxVisitors = 10,
+            Prestige = new PrestigeInfo { Level = 0, MaxVisitors = 10, NextLevelMaxVisitors = 20 },
+        };
+
+        var advice = Single(park, "prestige limit");
+
+        Assert.Equal(Severity.Low, advice.Severity);
+        Assert.Contains("20", advice.Detail);
+    }
+
+    [Fact]
+    public void A_full_park_at_the_prestige_limit_is_told_what_the_next_star_needs()
+    {
+        var park = Healthy() with
+        {
+            Visitors = 71,
+            MaxVisitors = 75,
+            NextStarTask = "Reach 5000 decoration points",
+            Prestige = new PrestigeInfo { Level = 4, MaxVisitors = 75, NextLevelMaxVisitors = 100 },
+        };
+
+        var advice = Single(park, "prestige limit");
+
+        Assert.Equal(Severity.Medium, advice.Severity);
+        Assert.Contains("Reach 5000 decoration points", advice.Detail);
+    }
+
+    [Fact]
+    public void The_top_complaint_comes_with_the_games_explanation_of_it()
+    {
+        var park = Healthy() with
+        {
+            Complaints = new[] { new CountLine("Poor service", 6) { Note = "Nobody was there to serve me." } },
+        };
+
+        Assert.Contains("Nobody was there to serve me.", Single(park, "complaint").Detail);
+    }
+
+    [Fact]
+    public void The_weakest_need_names_what_in_the_park_raises_it()
+    {
+        var park = Healthy() with
+        {
+            Needs = new[] { new NeedStat("Hygiene", 0.45, 21, 40) { Sources = new[] { "Far Shore Shower x4" } } },
+        };
+
+        Assert.Contains("Far Shore Shower x4", Single(park, "weakest need").Detail);
     }
 
     [Fact]

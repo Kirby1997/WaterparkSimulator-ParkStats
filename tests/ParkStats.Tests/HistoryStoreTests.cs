@@ -151,6 +151,24 @@ public sealed class HistoryStoreTests : IDisposable
     }
 
     [Fact]
+    public void Typical_income_is_the_average_of_the_most_recent_days()
+    {
+        var store = new HistoryStore(FilePath);
+        store.Add(Day(1, income: 100));
+        store.Add(Day(2, income: 1000));
+        store.Add(Day(3, income: 2000));
+        store.Add(Day(4, income: 3000));
+
+        Assert.Equal(2000, store.TypicalIncome(days: 3));
+    }
+
+    [Fact]
+    public void Typical_income_is_unknown_before_any_day_is_recorded()
+    {
+        Assert.Null(new HistoryStore(FilePath).TypicalIncome());
+    }
+
+    [Fact]
     public void A_corrupt_file_is_treated_as_empty_and_can_be_written_again()
     {
         Directory.CreateDirectory(_dir);

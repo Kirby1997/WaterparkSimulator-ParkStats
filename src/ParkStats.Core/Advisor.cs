@@ -30,9 +30,6 @@ public static class Advisor
     private const double StaffCostShare = 0.5;
     private const int NamesShown = 3;
 
-    // Money that is not earned by running the park.
-    private static readonly HashSet<string> NonOperatingReasons = new() { "Loan", "Cheats" };
-
     private static readonly Dictionary<string, string> NeedHints = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Fun"] = "Add more attractions or reopen closed ones.",
@@ -104,9 +101,13 @@ public static class Advisor
         var detail = $"{weakest.Name} satisfaction is {Format.Percent(average)}";
         if (weakest.GuestsCounted > 0)
         {
-            detail += $"; {weakest.GuestsBelowThreshold} of {weakest.GuestsCounted} guests are running low on it";
+            detail += $"; {weakest.GuestsLow} of {weakest.GuestsCounted} guests are under half";
         }
         detail += ".";
+        if (weakest.Sources.Count > 0)
+        {
+            detail += $" In the park it is raised by: {string.Join(", ", weakest.Sources)}.";
+        }
         if (NeedHints.TryGetValue(weakest.Name, out var hint))
         {
             detail += " " + hint;
@@ -177,8 +178,15 @@ public static class Advisor
         }
         else if (cap >= allowed && prestige.NextLevelMaxVisitors is { } next)
         {
-            advice.Add(new Advice(Severity.Low, "Prestige limit reached",
-                $"{cap} visitors is the most prestige {prestige.Level} allows. Prestige {prestige.Level + 1} allows {next}."));
+            var detail = $"{cap} visitors is the most prestige {prestige.Level} allows. Prestige {prestige.Level + 1} allows {next}.";
+            if (!string.IsNullOrWhiteSpace(park.NextStarTask))
+            {
+                detail += $" For the next star: {park.NextStarTask}";
+            }
+
+            // Only a park that actually fills up is held back by this.
+            var full = park.Visitors >= cap * NearFull;
+            advice.Add(new Advice(full ? Severity.Medium : Severity.Low, "Prestige limit reached", detail));
         }
     }
 
@@ -194,20 +202,24 @@ public static class Advisor
     {
         if (park.StaffCount is { } count && park.StaffCapacity is { } capacity && count > capacity)
         {
-            advice.Add(new Advice(Severity.Medium, "Staff over capacity",
-                $"{count}/{capacity} staff. Expand staff capacity or let someone go."));
+            var over = count - capacity;
+            var detail = $"{count} staff for a capacity of {capacity}.";
+            if (park.StaffTax > 0)
+            {
+                detail += $" Staff over capacity are taxed: {Format.Money(park.StaffTax)} a day at the moment.";
+            }
+            detail += $" Expand staff capacity or let {over} go.";
+            advice.Add(new Advice(Severity.Medium, "Staff over capacity", detail));
         }
 
-        if (park.StaffSalary is not { } salary) return;
+        // Judged against a whole day. Income so far today starts at nothing every morning.
+        if (park.StaffSalary is not { } salary || park.TypicalDayIncome is not { } income || income <= 0) return;
 
         var cost = salary + (park.StaffTax ?? 0);
-        var income = MoneyBreakdown
-            .From(park.MoneyToday.Where(l => !NonOperatingReasons.Contains(l.Reason)))
-            .TotalIncome;
-        if (income <= 0 || cost <= income * StaffCostShare) return;
+        if (cost <= income * StaffCostShare) return;
 
         advice.Add(new Advice(Severity.Medium, "Staff cost is high",
-            $"Staff cost {Format.Money(cost)} is {Format.Percent(cost / income)} of today's income so far ({Format.Money(income)})."));
+            $"Staff cost {Format.Money(cost)} a day is {Format.Percent(cost / income)} of a typical day's income ({Format.Money(income)})."));
     }
 
     private static void AddTopComplaint(ParkSnapshot park, List<Advice> advice)
@@ -215,7 +227,9 @@ public static class Advisor
         var top = park.Complaints.Where(c => c.Count > 0).MaxBy(c => c.Count);
         if (top is null) return;
 
-        advice.Add(new Advice(Severity.Low, "Top complaint", $"\"{top.Label}\" ({top.Count} times)."));
+        var detail = $"\"{top.Label}\" ({top.Count} times).";
+        if (!string.IsNullOrWhiteSpace(top.Note)) detail += " " + top.Note;
+        advice.Add(new Advice(Severity.Low, "Top complaint", detail));
     }
 
     private static string PriceLabel(RideRow ride) =>

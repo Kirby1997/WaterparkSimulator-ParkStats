@@ -29,6 +29,9 @@ public static class Format
         return percent.ToString("0", CultureInfo.InvariantCulture) + "%";
     }
 
+    public static string Multiplier(double? value) =>
+        value is null ? Unknown : "x" + value.Value.ToString("0.00", CultureInfo.InvariantCulture);
+
     public static string Ratio(int? current, int? max) => $"{Count(current)}/{Count(max)}";
 
     public static string Count(int? value) =>

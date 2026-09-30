@@ -7,11 +7,19 @@ public sealed record MoneyLine(string Reason, double Amount);
 
 public sealed record LoanLine(string Label, double Remaining);
 
-public sealed record CountLine(string Label, int Count);
+public sealed record CountLine(string Label, int Count)
+{
+    /// <summary>What the count means, in the game's own words when it has them.</summary>
+    public string? Note { get; init; }
+}
 
 public sealed record CapacityLine(string Name, int Current, int Max);
 
-public sealed record NeedStat(string Name, double? Average, int GuestsBelowThreshold, int GuestsCounted);
+public sealed record NeedStat(string Name, double? Average, int GuestsLow, int GuestsCounted)
+{
+    /// <summary>Attractions in the park that raise this need, e.g. "Far Shore Shower x4".</summary>
+    public IReadOnlyList<string> Sources { get; init; } = Array.Empty<string>();
+}
 
 public sealed record RideRow
 {
@@ -68,6 +76,16 @@ public sealed record ParkSnapshot
     public IReadOnlyList<CountLine> LeavingReasons { get; init; } = Array.Empty<CountLine>();
 
     public PrestigeInfo? Prestige { get; init; }
+
+    /// <summary>The game's own description of what the next star needs.</summary>
+    public string? NextStarTask { get; init; }
+
+    /// <summary>The game's multiplier on visitor numbers at the current recent satisfaction, and at the best.</summary>
+    public double? VisitorMultiplier { get; init; }
+    public double? BestVisitorMultiplier { get; init; }
+
+    /// <summary>Income of a full day, from recent history. Today's income is only a part of a day.</summary>
+    public double? TypicalDayIncome { get; init; }
 
     public IReadOnlyList<RideRow> Rides { get; init; } = Array.Empty<RideRow>();
     public IReadOnlyList<CapacityLine> Capacity { get; init; } = Array.Empty<CapacityLine>();

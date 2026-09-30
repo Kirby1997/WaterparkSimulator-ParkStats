@@ -75,6 +75,13 @@ public sealed class HistoryStore
         Save();
     }
 
+    /// <summary>Average income of the most recent recorded days; nothing before the first one.</summary>
+    public double? TypicalIncome(int days = 3)
+    {
+        var recent = _records.TakeLast(days).ToList();
+        return recent.Count == 0 ? null : recent.Average(r => r.Income);
+    }
+
     private void Save()
     {
         var directory = Path.GetDirectoryName(_path);

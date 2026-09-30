@@ -43,6 +43,15 @@ public class FormatTests
         Assert.Equal("n/a", Format.Percent(null));
     }
 
+    [Theory]
+    [InlineData(0.85, "x0.85")]
+    [InlineData(1.0, "x1.00")]
+    [InlineData(1.256, "x1.26")]
+    public void Multiplier_shows_two_decimals(double value, string expected)
+    {
+        Assert.Equal(expected, Format.Multiplier(value));
+    }
+
     [Fact]
     public void Ratio_joins_current_and_max()
     {

@@ -1,6 +1,8 @@
 using System.Globalization;
 using BepInEx.Logging;
 using CayplayAI;
+using CayplayMissions;
+using I2.Loc;
 using ParkStats.Core;
 
 namespace ParkStats.Plugin;
@@ -61,6 +63,8 @@ internal sealed class GameReader
         var visitors = Get("CurrentVisitorCount", () => game.CurrentVisitorCount);
         // With nobody in the park the game's satisfaction figures read zero, which says nothing.
         var hasGuests = visitors > 0;
+        var needSources = attractions == null ? new Dictionary<string, IReadOnlyList<string>>() : ReadNeedSources(attractions, raw);
+        var recent = Get("RecentAverageSatisfaction", () => game.HistorySystem.RecentAverageSatisfaction.Value);
 
         var snapshot = new ParkSnapshot
         {
@@ -83,11 +87,14 @@ internal sealed class GameReader
                 ? Normalize.Fraction(Get("CurrentSatisfaction", () => (double)game.CurrentSatisfaction.Value))
                 : null,
             DaySatisfaction = ReadDaySatisfaction(game, day),
-            RecentSatisfaction = Normalize.Fraction(
-                Get("RecentAverageSatisfaction", () => (double)game.HistorySystem.RecentAverageSatisfaction.Value)),
+            RecentSatisfaction = Normalize.Fraction(recent),
+            // The game's own curve from recent satisfaction to visitor numbers.
+            VisitorMultiplier = recent == null ? null : Get("GetSatisfactionPenaltyMultiplier", () => (double)GameSettings.Park.GetSatisfactionPenaltyMultiplier(recent.Value)),
+            BestVisitorMultiplier = Get("GetSatisfactionPenaltyMultiplier(1)", () => (double)GameSettings.Park.GetSatisfactionPenaltyMultiplier(1f)),
             AverageGuestCash = guests.AverageCash,
-            Needs = ReadNeeds(game, guests, hasGuests),
+            Needs = ReadNeeds(game, guests, hasGuests, needSources),
             Prestige = ReadPrestige(game, attractions),
+            NextStarTask = ReadNextStarTask(game, raw),
             Complaints = ReadComplaints(game, raw),
             LeavingReasons = guests.LeavingReasons,
 
@@ -216,7 +223,7 @@ internal sealed class GameReader
                 CountIfLow(stats, "Toilet", data.ToiletNeed);
                 CountIfLow(stats, "Trash", data.TrashNeed);
                 var energy = data.EnergyNeed;
-                if (energy != null && energy.Value < energy.LowReactionThreshold) Add(stats.Low, "Energy");
+                if (energy != null && UnderHalf(energy.Value, energy.MinValue, energy.MaxValue)) Add(stats.Low, "Energy");
 
                 if (data.IsLeavingPark) Add(leaving, Format.Reason(data.LeavingReason.ToString()));
 
@@ -250,20 +257,27 @@ internal sealed class GameReader
         return !data.IsStaff && !data.IsNPC && !data.IsDormant && data.DoesHaveTicket;
     }
 
-    // "Low" is the level at which a guest starts reacting to the need. The satisfaction
-    // threshold is far higher: it is where the guest stops looking to fill it.
+    // The game's own thresholds do not make a useful "low" mark: one sits near full (where a
+    // guest stops seeking the need) and the other near empty. Half way is plain to read.
     private static void CountIfLow(GuestStats stats, string need, AINeed value)
     {
-        if (value != null && value.Value < value.LowReactionThreshold) Add(stats.Low, need);
+        if (value != null && UnderHalf(value.Value, value.MinValue, value.MaxValue)) Add(stats.Low, need);
     }
 
-    private IReadOnlyList<NeedStat> ReadNeeds(GameManager game, GuestStats guests, bool hasGuests)
+    private static bool UnderHalf(float value, float min, float max) =>
+        max > min && (value - min) / (max - min) < 0.5f;
+
+    private IReadOnlyList<NeedStat> ReadNeeds(GameManager game, GuestStats guests, bool hasGuests,
+        Dictionary<string, IReadOnlyList<string>> sources)
     {
         NeedStat Need(string name, Func<float> average) => new(
             name,
             hasGuests ? Normalize.Fraction(Get(name + "Satisfaction", () => (double)average())) : null,
             guests.Low.TryGetValue(name, out var low) ? low : 0,
-            guests.Counted);
+            guests.Counted)
+        {
+            Sources = sources.TryGetValue(name, out var raisedBy) ? raisedBy : Array.Empty<string>(),
+        };
 
         return new[]
         {
@@ -275,6 +289,145 @@ internal sealed class GameReader
             Need("Toilet", () => game.ToiletSatisfaction.Value),
             Need("Trash", () => game.TrashSatisfaction.Value),
         };
+    }
+
+    /// <summary>
+    /// Which built attractions raise which need, from the stat changes the game applies when a
+    /// guest uses them. Only positive claims come out of this: an attraction that works some
+    /// other way (handing over an item, say) is simply not listed.
+    /// </summary>
+    private Dictionary<string, IReadOnlyList<string>> ReadNeedSources(AttractionManager manager, List<string> raw)
+    {
+        const int shown = 4;
+        var byNeed = new Dictionary<string, Dictionary<string, int>>();
+        try
+        {
+            var attractions = manager.ParkAttractions;
+            for (var i = 0; attractions != null && i < attractions.Count; i++)
+            {
+                var attraction = attractions[i];
+                if (attraction == null || !attraction.IsBuilt) continue;
+                var changes = attraction.AttractionData?.StatChanges;
+                if (changes == null) continue;
+
+                var name = RideName(attraction);
+                for (var j = 0; j < changes.Length; j++)
+                {
+                    var change = changes[j];
+                    if (change == null) continue;
+                    Note(raw, $"StatChange {name}", $"{change.Target} {Number(change.Value)}");
+                    var need = NeedName(change.Target);
+                    if (need == null || change.Value <= 0) continue;
+
+                    if (!byNeed.TryGetValue(need, out var names)) byNeed[need] = names = new Dictionary<string, int>();
+                    Add(names, name);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Report("StatChanges", e);
+        }
+
+        var result = new Dictionary<string, IReadOnlyList<string>>();
+        foreach (var (need, names) in byNeed)
+        {
+            var labels = names
+                .OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.Ordinal)
+                .Select(p => p.Value > 1 ? $"{p.Key} x{p.Value}" : p.Key)
+                .ToList();
+            if (labels.Count > shown)
+            {
+                var more = labels.Count - shown;
+                labels = labels.Take(shown).Append($"{more} more").ToList();
+            }
+            result[need] = labels;
+        }
+        return result;
+    }
+
+    private static string NeedName(EStat stat) => stat switch
+    {
+        EStat.Fun => "Fun",
+        EStat.Energy => "Energy",
+        EStat.Hygiene => "Hygiene",
+        EStat.Thirst => "Thirst",
+        EStat.Hunger => "Hunger",
+        EStat.Toilet => "Toilet",
+        EStat.Trash => "Trash",
+        _ => null,
+    };
+
+    /// <summary>
+    /// The game's own wording of what the next star needs. Stars are handed out by a mission,
+    /// so this is the current task of the active mission that goes on to raise prestige.
+    /// </summary>
+    private string ReadNextStarTask(GameManager game, List<string> raw)
+    {
+        try
+        {
+            var missions = game.MissionManager?.ActiveMissions;
+            if (missions == null) return null;
+
+            var prestige = game.ParkPrestige.Value;
+            string task = null;
+            for (var i = 0; i < missions.Count; i++)
+            {
+                var mission = missions[i];
+                if (mission == null) continue;
+
+                var raises = RaisesPrestige(mission, prestige);
+                var text = Ref("Mission.GetTaskText", () => mission.GetTaskText());
+                text = string.IsNullOrWhiteSpace(text) ? null : string.Join("; ", text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                Note(raw, $"Mission[{i}]", $"{mission.MissionSO?.MissionID} stage {mission.CurrentStage?.StageIndex} raises prestige {raises} task \"{text}\"");
+                if (raw != null) NoteConditions(mission, raw);
+
+                if (raises && task == null) task = text;
+            }
+            return task;
+        }
+        catch (Exception e)
+        {
+            Report("Missions", e);
+            return null;
+        }
+    }
+
+    private static bool RaisesPrestige(MissionData mission, float prestige)
+    {
+        var stages = mission.Stages;
+        for (var i = 0; stages != null && i < stages.Count; i++)
+        {
+            var actions = stages[i]?.Actions;
+            for (var j = 0; actions != null && j < actions.Count; j++)
+            {
+                var setPrestige = actions[j]?.TryCast<SetParkPrestige_MissionAction>();
+                if (setPrestige != null && setPrestige.ParkPrestige > prestige) return true;
+            }
+        }
+        return false;
+    }
+
+    private void NoteConditions(MissionData mission, List<string> raw)
+    {
+        try
+        {
+            var transitions = mission.CurrentStage?.Transitions;
+            for (var i = 0; transitions != null && i < transitions.Count; i++)
+            {
+                var conditions = transitions[i]?.Conditions;
+                for (var j = 0; conditions != null && j < conditions.Count; j++)
+                {
+                    var condition = conditions[j];
+                    if (condition == null) continue;
+                    Note(raw, "  condition", $"{condition.GetIl2CppType().Name} counter {Number(condition.Counter)} passed {condition._hasPassed} text \"{condition.GetTaskText()}\"");
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Note(raw, "  conditions", $"<{e.GetType().Name}: {e.Message}>");
+        }
     }
 
     /// <summary>
@@ -363,25 +516,57 @@ internal sealed class GameReader
 
             // The game counts every thought; complaints are the ones that lower mood.
             var current = new Dictionary<string, int>();
+            var notes = new Dictionary<string, string>();
             for (var i = 0; i < thoughts.Count; i++)
             {
                 var thought = thoughts[i];
                 if (thought == null || thought.MoodEffect >= 0) continue;
-                if (occurrences.TryGetValue(thought.Type, out var count) && count > 0)
-                {
-                    current[Format.Reason(thought.Type.ToString())] = count;
-                }
+
+                var label = Format.Reason(thought.Type.ToString());
+                // What the guest thinks, as the game words it in the player's language.
+                var said = Translate(thought.LocalizedName);
+                var why = Translate(thought.LocalizedDescription);
+                var note = string.Join(" ", new[] { said, why }.Where(t => t != null));
+                if (note.Length > 0) notes[label] = note;
+                Note(raw, $"Thought {thought.Type}", $"mood {Number(thought.MoodEffect)} name \"{said}\" description \"{why}\"");
+
+                if (occurrences.TryGetValue(thought.Type, out var count) && count > 0) current[label] = count;
             }
             Note(raw, "Complaint totals", string.Join(", ", current.Select(p => $"{p.Key}={p.Value}")));
 
             _complaintBaseline ??= current;
-            return Normalize.Since(_complaintBaseline, current);
+            return Normalize.Since(_complaintBaseline, current)
+                .Select(line => notes.TryGetValue(line.Label, out var note) ? line with { Note = note } : line)
+                .ToList();
         }
         catch (Exception e)
         {
             Report("Complaints", e);
             return Array.Empty<CountLine>();
         }
+    }
+
+    private static string Translate(LocalizedString text)
+    {
+        try
+        {
+            var term = text?.mTerm;
+            if (string.IsNullOrEmpty(term)) return null;
+            var translation = LocalizationManager.GetTranslation(term);
+            return string.IsNullOrWhiteSpace(translation) ? null : translation.Trim();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private string RideName(AttractionInteraction attraction)
+    {
+        var name = Ref("Building.GetName", () => attraction.Building?.GetName())
+            ?? Ref("Attraction.name", () => attraction.name)
+            ?? "?";
+        return name.Replace("(Clone)", "").Trim();
     }
 
     private IReadOnlyList<RideRow> ReadRides(AttractionManager manager, List<string> raw)
@@ -407,10 +592,7 @@ internal sealed class GameReader
 
     private RideRow ReadRide(AttractionInteraction attraction, List<string> raw)
     {
-        var name = Ref("Building.GetName", () => attraction.Building?.GetName())
-            ?? Ref("Attraction.name", () => attraction.name)
-            ?? "?";
-        name = name.Replace("(Clone)", "").Trim();
+        var name = RideName(attraction);
 
         var price = Get("CurrentPrice", () => (double)attraction.CurrentPrice);
         var ideal = Get("IdealPrice", () => (double)attraction.AttractionData.IdealPrice);
@@ -481,6 +663,20 @@ internal sealed class GameReader
         Note(raw, "DurabilityThreshold", Get("DurabilityThreshold", () => GameSettings.Attractions.DurabilityThreshold));
         Note(raw, "DurabilityStaffPreventionThreshold", Get("DurabilityStaffPreventionThreshold", () => GameSettings.Attractions.DurabilityStaffPreventionThreshold));
         Note(raw, "ParkPrestige", Get("ParkPrestige", () => game.ParkPrestige.Value));
+        var staff = game.StaffManager;
+        if (staff != null)
+        {
+            Note(raw, "CalculateStaffSalary()", Get("CalculateStaffSalary", () => staff.CalculateStaffSalary()));
+            Note(raw, "CalculateStaffTax()", Get("CalculateStaffTax", () => staff.CalculateStaffTax()));
+            Note(raw, "CalculateStaffOverCap()", Get("CalculateStaffOverCap", () => staff.CalculateStaffOverCap()));
+            Note(raw, "CalculateStaffOvertimePay()", Get("CalculateStaffOvertimePay", () => staff.CalculateStaffOvertimePay()));
+            Note(raw, "StaffTaxPercentPerOverhire", Get("StaffTaxPercentPerOverhire", () => GameSettings.Staff.StaffTaxPercentPerOverhire));
+        }
+        for (var satisfaction = 0.2f; satisfaction <= 1.001f; satisfaction += 0.1f)
+        {
+            var level = satisfaction;
+            Note(raw, $"GetSatisfactionPenaltyMultiplier({Number(level)})", Get("GetSatisfactionPenaltyMultiplier sample", () => GameSettings.Park.GetSatisfactionPenaltyMultiplier(level)));
+        }
         Note(raw, "ParkPrestigeInt", Get("ParkPrestigeInt", () => game.ParkPrestigeInt));
         Note(raw, "CurrentBonusVisitorCount", Get("CurrentBonusVisitorCount", () => game.CurrentBonusVisitorCount));
         Note(raw, "CurrentBaseVisitorCount", Get("CurrentBaseVisitorCount", () => game.CurrentBaseVisitorCount));

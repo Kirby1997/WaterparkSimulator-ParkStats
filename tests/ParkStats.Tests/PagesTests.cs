@@ -229,7 +229,7 @@ public class PagesTests
 
         var rows = Pages.Guests(park);
 
-        Assert.Equal("Need | Average | Guests low", rows[0].Text);
+        Assert.Equal("Need | Average | Under 50%", rows[0].Text);
         Has(rows, RowKind.Good, "Fun | 82% | 2/40");
         Has(rows, RowKind.Bad, "Toilet | 35% | 21/40");
         Has(rows, RowKind.Normal, "Thirst | 55% | 9/40");
@@ -281,6 +281,60 @@ public class PagesTests
     }
 
     [Fact]
+    public void Guests_lists_what_in_the_park_raises_each_need()
+    {
+        var park = new ParkSnapshot
+        {
+            Needs = new[]
+            {
+                new NeedStat("Fun", 0.78, 0, 57) { Sources = new[] { "Wave Slide", "Crew Challenge Slide x2" } },
+                new NeedStat("Trash", 0.65, 0, 57),
+            },
+        };
+
+        var rows = Pages.Guests(park);
+
+        Has(rows, RowKind.Header, "Raised by");
+        Has(rows, RowKind.Normal, "Fun: Wave Slide, Crew Challenge Slide x2");
+        Assert.DoesNotContain(Texts(rows), t => t.StartsWith("Trash:"));
+    }
+
+    [Fact]
+    public void Guests_shows_what_satisfaction_does_to_visitor_numbers()
+    {
+        var park = new ParkSnapshot { RecentSatisfaction = 0.7, VisitorMultiplier = 0.85, BestVisitorMultiplier = 1 };
+
+        var rows = Pages.Guests(park);
+
+        Has(rows, RowKind.Header, "What satisfaction buys");
+        Has(rows, RowKind.Normal, "Recent satisfaction | 70%");
+        Has(rows, RowKind.Normal, "Visitor multiplier | x0.85 (x1.00 at best)");
+    }
+
+    [Fact]
+    public void Guests_shows_a_visitor_multiplier_already_at_its_best_without_the_comparison()
+    {
+        var park = new ParkSnapshot { VisitorMultiplier = 1, BestVisitorMultiplier = 1 };
+
+        Has(Pages.Guests(park), RowKind.Normal, "Visitor multiplier | x1.00");
+    }
+
+    [Fact]
+    public void Guests_explains_a_complaint_when_the_game_has_a_description_for_it()
+    {
+        var park = new ParkSnapshot
+        {
+            Complaints = new[] { new CountLine("Poor service", 6) { Note = "Nobody was there to serve me." } },
+        };
+
+        var texts = Texts(Pages.Guests(park));
+
+        var complaint = Array.IndexOf(texts, "Poor service | 6");
+        Assert.True(complaint >= 0);
+        Assert.Equal("Nobody was there to serve me.", texts[complaint + 1]);
+    }
+
+    [Fact]
     public void Guests_shows_the_five_most_common_complaints_and_leaving_reasons()
     {
         var complaints = Enumerable.Range(1, 7).Select(i => new CountLine("Complaint " + i, i)).ToArray();
@@ -307,7 +361,7 @@ public class PagesTests
 
         Assert.DoesNotContain("Top complaints", texts);
         Assert.DoesNotContain("Leaving because", texts);
-        Assert.DoesNotContain("Need | Average | Guests low", texts);
+        Assert.DoesNotContain("Need | Average | Under 50%", texts);
     }
 
     [Fact]
@@ -426,15 +480,7 @@ public class PagesTests
     }
 
     [Fact]
-    public void Overview_marks_a_losing_day_as_bad()
-    {
-        var park = new ParkSnapshot { MoneyToday = new[] { new MoneyLine("StaffSalary", -300) } };
-
-        Has(Pages.Overview(park, Array.Empty<Advice>()), RowKind.Bad, "Net today | -300");
-    }
-
-    [Fact]
-    public void Overview_lists_only_the_three_most_urgent_advice_titles()
+    public void Overview_lists_the_three_most_urgent_things_to_do_with_their_details()
     {
         var advice = new[]
         {
@@ -448,7 +494,18 @@ public class PagesTests
 
         Has(rows, RowKind.Header, "Do next");
         Has(rows, RowKind.Bad, "First");
+        Has(rows, RowKind.Muted, "a");
         Has(rows, RowKind.Normal, "Third");
+        Has(rows, RowKind.Muted, "c");
         Assert.DoesNotContain("Fourth", Texts(rows));
+        Assert.DoesNotContain("d", Texts(rows));
+    }
+
+    [Fact]
+    public void Overview_marks_a_losing_day_as_bad()
+    {
+        var park = new ParkSnapshot { MoneyToday = new[] { new MoneyLine("StaffSalary", -300) } };
+
+        Has(Pages.Overview(park, Array.Empty<Advice>()), RowKind.Bad, "Net today | -300");
     }
 }

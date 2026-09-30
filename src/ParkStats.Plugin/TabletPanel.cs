@@ -48,6 +48,9 @@ internal sealed class TabletPanel
     private long _lastLayout;
     private RectTransform _root;
     private RectTransform _card;
+    // The game's own stats on this page, hidden while a mod tab is showing in their place.
+    private readonly List<GameObject> _gameStats = new();
+    private readonly List<bool> _gameStatsWereActive = new();
     private GameObject _bar;
     private GameObject _content;
     private TextMeshProUGUI _text;
@@ -118,6 +121,8 @@ internal sealed class TabletPanel
     {
         _root = page.GetComponent<RectTransform>();
         _card = null;
+        _gameStats.Clear();
+        _gameStatsWereActive.Clear();
         var template = tablet.TicketPrice;
         var layer = page.layer;
 
@@ -151,7 +156,7 @@ internal sealed class TabletPanel
 
         _content = NewObject("ParkStats Content", _root, layer);
         var contentRect = _content.GetComponent<RectTransform>();
-        // Opaque, so it covers the game's own stats while a mod tab is selected.
+        // Opaque until the game's card is found; after that the card itself is the background.
         _content.AddComponent<Image>().color = PanelColor;
 
         var viewport = NewObject("Viewport", contentRect, layer);
@@ -219,6 +224,7 @@ internal sealed class TabletPanel
         _geometry.Add($"gap above stats = {N(gap)}, tab bar in gap = {fitsInGap}");
         _geometry.Add($"tab bar = {bar}");
         _geometry.Add($"content = {content}");
+        _geometry.Add($"game stats hidden on mod tabs = {string.Join(", ", _gameStats.Select(g => g.name))}");
         _geometry.Add($"font size = {N(_text.fontSize)} (template {N(tablet.TicketPrice.fontSize)})");
         return true;
     }
@@ -229,7 +235,11 @@ internal sealed class TabletPanel
         source = "no stats elements found";
         if (StatsElements(tablet) is not { } stats) return default;
 
-        if (_card == null) _card = FindCard(stats);
+        if (_card == null)
+        {
+            _card = FindCard(stats);
+            if (_card != null) UseCardAsBackground(tablet);
+        }
         if (_card != null)
         {
             source = "card '" + _card.name + "'";
@@ -244,10 +254,10 @@ internal sealed class TabletPanel
     private Box? StatsElements(TabletUI tablet)
     {
         Box? union = null;
-        void Add(Component component)
+        foreach (var component in StatsComponents(tablet))
         {
-            var rect = component == null ? null : component.transform.TryCast<RectTransform>();
-            if (rect == null) return;
+            var rect = component.transform.TryCast<RectTransform>();
+            if (rect == null) continue;
 
             var box = LocalBox(rect);
             union = union is not { } soFar
@@ -255,20 +265,67 @@ internal sealed class TabletPanel
                 : new Box(Math.Min(soFar.XMin, box.XMin), Math.Min(soFar.YMin, box.YMin),
                     Math.Max(soFar.XMax, box.XMax), Math.Max(soFar.YMax, box.YMax));
         }
-
-        Add(tablet.TeensAmount);
-        Add(tablet.AdultsAmount);
-        Add(tablet.SeniorsAmount);
-        Add(tablet.VisitorsAmount);
-        Add(tablet.OverallSlider);
-        Add(tablet.FunSlider);
-        Add(tablet.EnergySlider);
-        Add(tablet.HygeineSlider);
-        Add(tablet.ThirstSlider);
-        Add(tablet.HungerSlider);
-        Add(tablet.ToiletSlider);
-        Add(tablet.TrashSlider);
         return union;
+    }
+
+    private static IEnumerable<Component> StatsComponents(TabletUI tablet)
+    {
+        var components = new Component[]
+        {
+            tablet.TeensAmount, tablet.AdultsAmount, tablet.SeniorsAmount, tablet.VisitorsAmount,
+            tablet.OverallSlider, tablet.FunSlider, tablet.EnergySlider, tablet.HygeineSlider,
+            tablet.ThirstSlider, tablet.HungerSlider, tablet.ToiletSlider, tablet.TrashSlider,
+        };
+        return components.Where(c => c != null);
+    }
+
+    /// <summary>
+    /// Makes the mod tabs look like the game's own page: the content area goes transparent so
+    /// the game's card shows through, and the game's stats on that card are collected so they
+    /// can be hidden while a mod tab is showing.
+    /// </summary>
+    private void UseCardAsBackground(TabletUI tablet)
+    {
+        var cardAncestors = new HashSet<IntPtr>();
+        for (Transform t = _card; t != null && t.Pointer != _root.Pointer; t = t.parent) cardAncestors.Add(t.Pointer);
+
+        var seen = new HashSet<IntPtr>();
+        void Collect(Transform transform)
+        {
+            if (transform == null || cardAncestors.Contains(transform.Pointer) || !seen.Add(transform.Pointer)) return;
+            _gameStats.Add(transform.gameObject);
+            _gameStatsWereActive.Add(transform.gameObject.activeSelf);
+        }
+
+        // Each stat, taken as the largest object that holds it without also holding the card.
+        foreach (var component in StatsComponents(tablet))
+        {
+            var transform = component.transform;
+            while (transform.parent != null && transform.parent.Pointer != _root.Pointer && !cardAncestors.Contains(transform.parent.Pointer))
+            {
+                transform = transform.parent;
+            }
+            Collect(transform);
+        }
+
+        // Fixed labels such as "Visitor Needs:" sit beside the card under the same parent.
+        for (var ancestor = _card.parent; ancestor != null && ancestor.Pointer != _root.Pointer; ancestor = ancestor.parent)
+        {
+            for (var i = 0; i < ancestor.childCount; i++) Collect(ancestor.GetChild(i));
+        }
+
+        // Still there to catch the mouse wheel, just not drawn.
+        _content.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+        ShowGameStats(_selected == ParkTab);
+    }
+
+    private void ShowGameStats(bool show)
+    {
+        for (var i = 0; i < _gameStats.Count; i++)
+        {
+            var target = show && _gameStatsWereActive[i];
+            if (_gameStats[i].activeSelf != target) _gameStats[i].SetActive(target);
+        }
     }
 
     /// <summary>
@@ -322,6 +379,7 @@ internal sealed class TabletPanel
         try
         {
             _selected = index;
+            ShowGameStats(index == ParkTab);
             _content.SetActive(index != ParkTab);
             PaintTabs();
             if (index == ParkTab) return;
@@ -344,6 +402,8 @@ internal sealed class TabletPanel
         if (!force && now - _lastRefresh < RefreshIntervalMs) return;
         _lastRefresh = now;
 
+        // In case the game switched one of its own stats back on.
+        ShowGameStats(false);
         _text.text = TmpMarkup.Render(Rows(_selected));
     }
 
@@ -352,6 +412,7 @@ internal sealed class TabletPanel
     {
         var park = _reader.Read();
         if (park == null) return new[] { Row.Of(RowKind.Muted, "No park loaded") };
+        park = park with { TypicalDayIncome = _history()?.TypicalIncome() };
 
         return TabNames[tab] switch
         {

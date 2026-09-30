@@ -7,12 +7,14 @@ The game's Park Management page shows the ticket price, the age split, a visitor
 | Tab | Shows |
 |---|---|
 | Park | The game's own page, unchanged |
-| Today | Net result so far, visitors, satisfaction, and the three most urgent things to fix |
+| Today | Net result so far, visitors, satisfaction, prestige, and the three most urgent things to do, each with its reason |
 | Money | Today's income and expenses by reason, balance, lifetime totals, loans, staff cost |
 | Rides | Attractions by kind: open, closed or broken, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
-| Guests | Each need with its average and how many guests are running low, average cash, top complaints, reasons for leaving |
+| Guests | Each need with its average and how many guests are under half, which attractions raise it, what satisfaction does to visitor numbers, top complaints in the game's own words, reasons for leaving |
 | History | Visitors, net result and satisfaction for past days |
-| Advice | A ranked list of what is holding the park back |
+| Advice | A ranked list of what is holding the park back, including what the next star needs |
+
+The tabs use the game's own card and text style. While one of them is open, the game's own stats on that card are hidden; the Park tab brings them back.
 
 The mod only reads the game's state. It changes nothing in your park or your save.
 
@@ -28,6 +30,8 @@ Things to know:
 - The Money tab counts every change to your balance. The game's own end-of-day report leaves out miscellaneous income such as trash rewards, so the two can differ by that amount.
 - While the park is empty the game has no satisfaction readings, so needs show as `n/a`.
 - Advice about the ticket price is switched off until the meaning of the game's target price is confirmed.
+- Staff cost is judged against the income of recent full days, so that advice stays quiet until one day has been recorded.
+- "Raised by" lists attractions whose use changes a need directly. An attraction that works another way, such as handing out an item, may be missing from it.
 
 ## Install
 

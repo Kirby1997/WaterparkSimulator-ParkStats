@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ParkStats.Core;
 
@@ -51,13 +52,16 @@ public static class TmpMarkup
 
     private static (string Open, string Close) Wrap(RowKind kind) => kind switch
     {
-        RowKind.Header => ("<color=#FFD84A><b>", "</b></color>"),
-        RowKind.Good => ("<color=#5CFF8F>", "</color>"),
-        RowKind.Bad => ("<color=#FF6B6B>", "</color>"),
-        RowKind.Muted => ("<color=#9AD7FF>", "</color>"),
+        RowKind.Header => ("<color=#F2A900><b>", "</b></color>"),
+        RowKind.Good => ("<color=#1FAF5A>", "</color>"),
+        RowKind.Bad => ("<color=#E0433F>", "</color>"),
+        RowKind.Muted => ("<color=#5F86AD>", "</color>"),
         _ => ("", ""),
     };
 
-    // Names come from the game and other players; without brackets they cannot form tags.
-    private static string Plain(string cell) => cell.Replace("<", "").Replace(">", "");
+    private static readonly Regex Tag = new("<[^<>]*>", RegexOptions.Compiled);
+
+    // Text comes from the game and from other players. Its own tags are dropped, and no
+    // bracket is left that could start one.
+    private static string Plain(string cell) => Tag.Replace(cell, "").Replace("<", "").Replace(">", "");
 }
