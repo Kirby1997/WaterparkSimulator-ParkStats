@@ -505,6 +505,26 @@ public class AdvisorTests
     }
 
     [Fact]
+    public void A_guest_request_nobody_has_answered_is_a_high_priority()
+    {
+        var park = Healthy() with
+        {
+            Rides = new[]
+            {
+                new RideRow { Name = "Wooden Sauna", HasOpenRequest = true },
+                new RideRow { Name = "Wooden Hot Tub" },
+            },
+        };
+
+        var advice = Single(park, "request");
+
+        Assert.Equal(Severity.High, advice.Severity);
+        Assert.Contains("Wooden Sauna", advice.Detail);
+        Assert.DoesNotContain("Wooden Hot Tub", advice.Detail);
+        Assert.Contains("control panel", advice.Detail);
+    }
+
+    [Fact]
     public void Advice_is_ordered_from_most_to_least_urgent()
     {
         var park = Healthy() with

@@ -9,7 +9,8 @@ public static class ComplaintHints
     // does not tell the player what to change. These say what lies behind it.
     private static readonly Dictionary<string, string> Hints = new()
     {
-        ["PoorService"] = "A member of staff served them badly.",
+        ["PoorService"] = "A guest in a sauna or hot tub asked for different settings and did not get them. " +
+                          "Set what they ask for on its control panel.",
         ["WaitedTooLong"] = "They gave up waiting to be served. The stand or desk needs more or faster staff.",
         ["Waiting"] = "They are waiting to be served.",
         ["Tired"] = "No free lounger when they needed rest.",
@@ -34,6 +35,14 @@ public static class ComplaintHints
         ["Disgust"] = "They saw something disgusting nearby.",
     };
 
+    // Complaints caused by the attraction the guest was using. For the rest, the attraction a
+    // guest happened to be heading for says nothing about the cause.
+    private static readonly HashSet<string> AboutAnAttraction = new()
+    {
+        "PoorService", "WaitedTooLong", "Waiting", "UsedDirtyAttraction", "UsedWornAttraction",
+        "WaterWasDirty", "PoolWasDrained", "Drowning", "Injured",
+    };
+
     public static string? For(string thought) => Hints.TryGetValue(thought, out var hint) ? hint : null;
 
     /// <summary>The hint for a complaint followed by where it has mostly happened.</summary>
@@ -42,7 +51,9 @@ public static class ComplaintHints
         var parts = new List<string>();
         if (For(thought) is { } hint) parts.Add(hint);
 
-        var top = places.Where(p => p.Count > 0).OrderByDescending(p => p.Count).Take(PlacesShown).ToList();
+        var top = AboutAnAttraction.Contains(thought)
+            ? places.Where(p => p.Count > 0).OrderByDescending(p => p.Count).Take(PlacesShown).ToList()
+            : new List<CountLine>();
         if (top.Count > 0)
         {
             parts.Add($"Mostly at: {string.Join(", ", top.Select(p => $"{p.Label} ({p.Count})"))}.");

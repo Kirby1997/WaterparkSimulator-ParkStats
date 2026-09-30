@@ -205,14 +205,8 @@ public static class Pages
                 : Format.Ratio(park.Visitors, park.MaxVisitors)));
         }
         if (park.ExpectedVisitors != park.MaxVisitors) AddIfKnown(counts, "Expected", park.ExpectedVisitors);
-        if (park.AverageGuestCash >= UnlimitedCashFrom)
-        {
-            counts.Add(Row.Of(RowKind.Normal, "Average cash", "unlimited"));
-        }
-        else
-        {
-            AddIfKnown(counts, "Average cash", park.AverageGuestCash);
-        }
+        // Only worth a line when guests can actually run short.
+        if (park.AverageGuestCash < UnlimitedCashFrom) AddIfKnown(counts, "Average cash", park.AverageGuestCash);
         AddIfKnown(counts, "Refunded", park.RefundedVisitors);
         AddIfKnown(counts, "Injured", park.InjuredVisitors);
         if (counts.Count > 0)
@@ -231,7 +225,7 @@ public static class Pages
             }
         }
 
-        if (park.RecentSatisfaction is not null || park.VisitorMultiplier is not null)
+        if (park.VisitorMultiplier is not null)
         {
             rows.Add(Row.Of(RowKind.Header, "What satisfaction buys"));
             if (park.RecentSatisfaction is not null)
@@ -302,7 +296,10 @@ public static class Pages
         var broken = rides.Count(r => r.IsBroken);
         var open = rides.Count(r => r.IsOpen);
 
+        var requests = rides.Count(r => r.HasOpenRequest);
+
         var (kind, state) = broken > 0 ? (RowKind.Bad, count == 1 ? "Broken" : $"{broken} broken")
+            : requests > 0 ? (RowKind.Bad, count == 1 ? "Request" : requests == 1 ? "1 request" : $"{requests} requests")
             : open == 0 ? (RowKind.Muted, "Closed")
             : open == count ? (RowKind.Normal, "Open")
             : (RowKind.Normal, $"{open}/{count} open");
@@ -350,7 +347,7 @@ public static class Pages
         foreach (var line in top)
         {
             rows.Add(Row.Of(RowKind.Normal, line.Label, Format.Count(line.Count)));
-            if (!string.IsNullOrWhiteSpace(line.Note)) rows.Add(Row.Of(RowKind.Muted, line.Note));
+            if (!string.IsNullOrWhiteSpace(line.Note)) rows.Add(Row.Of(RowKind.Normal, line.Note));
         }
     }
 

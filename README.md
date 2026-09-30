@@ -9,8 +9,8 @@ The game's Park Management page shows the ticket price, the age split, a visitor
 | Park | The game's own page, unchanged |
 | Today | Net result so far, visitors, satisfaction, prestige, and the three most urgent things to do, each with its reason |
 | Money | Today's income and expenses by reason, income per visitor, what each kind of attraction has earned, balance, lifetime totals, loans, staff cost |
-| Rides | Attractions by kind: open, closed or broken, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
-| Guests | Each need with its average and how many guests are under half, which attractions raise it, what satisfaction does to visitor numbers, top complaints with their cause and where they happen, reasons for leaving |
+| Rides | Attractions by kind: open, closed, broken or with a guest request waiting, uses today, price against ideal price, worst cleanliness and durability, guests waiting |
+| Guests | Each need with its average and how many guests are under half, which attractions raise it, top complaints with their cause and where they happen, reasons for leaving |
 | History | Visitors, net result and satisfaction for past days |
 | Advice | A ranked list of what is holding the park back or losing sales: empty stands, queues, unused or underpriced attractions, the weakest need, and what the next star needs |
 
@@ -48,7 +48,7 @@ By hand: install BepInEx 6 (IL2CPP) for the game, then copy `ParkStats.Plugin.dl
 | `Enabled` | `true` | Add the tabs |
 | `FontScale` | `1` | Text size multiplier for the tabs |
 | `HistoryDays` | `60` | Days kept by the History tab |
-| `WriteDiagnostics` | `true` | Write `BepInEx/config/ParkStats/diagnostics.txt` when the page is opened |
+| `WriteDiagnostics` | `true` | Write `diagnostics.txt` and `method-addresses.txt` to `BepInEx/config/ParkStats/` when the page is opened |
 
 If the mod misbehaves after a game update, attach `diagnostics.txt` and `BepInEx/LogOutput.log` to an issue.
 

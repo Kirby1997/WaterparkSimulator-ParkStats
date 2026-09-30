@@ -102,7 +102,11 @@ public sealed class Plugin : BasePlugin
             var path = Path.Combine(DataDirectory, "diagnostics.txt");
             Diagnostics.Write(path, tablet, _reader, Panel, panelLines);
             // The file is rewritten on every tab click; saying so once is enough.
-            if (!_diagnosticsLogged) Log.LogInfo($"Diagnostics written to {path}");
+            if (!_diagnosticsLogged)
+            {
+                Log.LogInfo($"Diagnostics written to {path}");
+                MethodAddresses.Write(Path.Combine(DataDirectory, "method-addresses.txt"));
+            }
             _diagnosticsLogged = true;
         }
         catch (Exception e)

@@ -33,10 +33,23 @@ public class TmpMarkupTests
     [Theory]
     [InlineData(RowKind.Good, "#1FAF5A")]
     [InlineData(RowKind.Bad, "#E0433F")]
-    [InlineData(RowKind.Muted, "#2E6DB4")]
     public void Coloured_kinds_wrap_the_line_in_a_colour(RowKind kind, string colour)
     {
         Assert.Equal($"<color={colour}>Net<pos=62%>+5</color>", Render(Row.Of(kind, "Net", "+5")));
+    }
+
+    [Fact]
+    public void A_muted_row_is_plain_text_because_tinted_text_was_hard_to_read()
+    {
+        Assert.Equal("Closed<pos=62%>-", Render(Row.Of(RowKind.Muted, "Closed", "-")));
+    }
+
+    [Fact]
+    public void A_header_directly_under_another_header_gets_no_gap()
+    {
+        var text = Render(Row.Of(RowKind.Header, "Do next"), Row.Of(RowKind.Header, "Next star"));
+
+        Assert.Equal("<color=#F2A900><b>Do next</b></color>\n<color=#F2A900><b>Next star</b></color>", text);
     }
 
     [Fact]

@@ -38,6 +38,9 @@ public sealed record RideRow
     public int? StockLeft { get; init; }
     public int? StockCapacity { get; init; }
 
+    /// <summary>A guest inside has asked for different settings and not yet got them (sauna, hot tub).</summary>
+    public bool HasOpenRequest { get; init; }
+
     /// <summary>Uses today times the current price: what it has taken, near enough.</summary>
     public double Earned => UsesToday * (Price ?? 0);
 }

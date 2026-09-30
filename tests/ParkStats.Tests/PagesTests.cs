@@ -241,6 +241,14 @@ public class PagesTests
     }
 
     [Fact]
+    public void A_ride_with_a_guest_request_waiting_is_flagged()
+    {
+        var park = new ParkSnapshot { Rides = new[] { new RideRow { Name = "Wooden Sauna", HasOpenRequest = true } } };
+
+        Has(Pages.Rides(park), RowKind.Bad, "Wooden Sauna | Request | 0 | - | n/a | n/a | -");
+    }
+
+    [Fact]
     public void Rides_without_attractions_says_so()
     {
         Has(Pages.Rides(new ParkSnapshot()), RowKind.Muted, "No attractions built yet");
@@ -301,9 +309,18 @@ public class PagesTests
     }
 
     [Fact]
-    public void Guests_with_effectively_endless_cash_are_shown_as_unlimited()
+    public void Guests_with_effectively_endless_cash_get_no_cash_row()
     {
-        Has(Pages.Guests(new ParkSnapshot { AverageGuestCash = 999987 }), RowKind.Normal, "Average cash | unlimited");
+        // In game modes where guests cannot run out of money the figure tells the player nothing.
+        var texts = Texts(Pages.Guests(new ParkSnapshot { Visitors = 40, AverageGuestCash = 999987 }));
+
+        Assert.DoesNotContain(texts, t => t.StartsWith("Average cash"));
+    }
+
+    [Fact]
+    public void Guests_with_limited_cash_show_the_average()
+    {
+        Has(Pages.Guests(new ParkSnapshot { AverageGuestCash = 34.4 }), RowKind.Normal, "Average cash | 34");
     }
 
     [Fact]
@@ -346,6 +363,14 @@ public class PagesTests
     }
 
     [Fact]
+    public void Guests_says_nothing_about_what_satisfaction_buys_without_a_multiplier_to_show()
+    {
+        var texts = Texts(Pages.Guests(new ParkSnapshot { Visitors = 40, RecentSatisfaction = 0.7 }));
+
+        Assert.DoesNotContain("What satisfaction buys", texts);
+    }
+
+    [Fact]
     public void Guests_shows_a_visitor_multiplier_already_at_its_best_without_the_comparison()
     {
         var park = new ParkSnapshot { VisitorMultiplier = 1, BestVisitorMultiplier = 1 };
@@ -363,9 +388,11 @@ public class PagesTests
 
         var texts = Texts(Pages.Guests(park));
 
+        var rows = Pages.Guests(park);
         var complaint = Array.IndexOf(texts, "Poor service | 6");
         Assert.True(complaint >= 0);
         Assert.Equal("Nobody was there to serve me.", texts[complaint + 1]);
+        Assert.Equal(RowKind.Normal, rows[complaint + 1].Kind);
     }
 
     [Fact]

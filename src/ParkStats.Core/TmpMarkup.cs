@@ -29,8 +29,9 @@ public static class TmpMarkup
             if (i > 0)
             {
                 text.Append('\n');
-                // A gap above each header, unless the row before it is already a blank one.
-                if (row.Kind == RowKind.Header && !IsBlank(rows[i - 1])) text.Append('\n');
+                // A gap above each header, unless it follows a blank row or sits under another header.
+                var previous = rows[i - 1];
+                if (row.Kind == RowKind.Header && !IsBlank(previous) && previous.Kind != RowKind.Header) text.Append('\n');
             }
 
             var (open, close) = Wrap(row.Kind);
@@ -58,7 +59,6 @@ public static class TmpMarkup
         RowKind.Header => ("<color=#F2A900><b>", "</b></color>"),
         RowKind.Good => ("<color=#1FAF5A>", "</color>"),
         RowKind.Bad => ("<color=#E0433F>", "</color>"),
-        RowKind.Muted => ("<color=#2E6DB4>", "</color>"),
         _ => ("", ""),
     };
 

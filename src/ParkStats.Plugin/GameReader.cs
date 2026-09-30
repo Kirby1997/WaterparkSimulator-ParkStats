@@ -99,9 +99,9 @@ internal sealed class GameReader
                 : null,
             DaySatisfaction = ReadDaySatisfaction(game, day),
             RecentSatisfaction = Normalize.Fraction(recent),
-            // The game's own curve from recent satisfaction to visitor numbers.
-            VisitorMultiplier = recent == null ? null : Get("GetSatisfactionPenaltyMultiplier", () => (double)GameSettings.Park.GetSatisfactionPenaltyMultiplier(recent.Value)),
-            BestVisitorMultiplier = Get("GetSatisfactionPenaltyMultiplier(1)", () => (double)GameSettings.Park.GetSatisfactionPenaltyMultiplier(1f)),
+            // VisitorMultiplier is deliberately left empty. The game has a curve from satisfaction
+            // to a multiplier (ParkSettings.GetSatisfactionPenaltyMultiplier), but where it applies
+            // that multiplier is not established, so the panel makes no claim about it.
             AverageGuestCash = guests.AverageCash,
             Needs = ReadNeeds(game, guests, hasGuests, needSources),
             Prestige = ReadPrestige(game, attractions),
@@ -666,7 +666,7 @@ internal sealed class GameReader
         {
             Note(raw, $"Ride {name}",
                 $"price {Number(price)} ideal {Number(ideal)} clean {Number(rawClean)} durability {Number(rawDurability)} maintenance {Number(maintenance)} " +
-                $"stock {stockLeft}/{stockCapacity} visitorBonus {Get("VisitorBonus", () => attraction.AttractionData.VisitorBonus)} " +
+                $"request {HasOpenRequest(attraction)} stock {stockLeft}/{stockCapacity} visitorBonus {Get("VisitorBonus", () => attraction.AttractionData.VisitorBonus)} " +
                 $"maxUsers {Get("MaxSimultaneousUsers", () => attraction.AttractionData.MaxSimultaneousUsers)} queueFull {Get("IsQueueFull", () => attraction.IsQueueFull)}");
         }
 
@@ -688,7 +688,30 @@ internal sealed class GameReader
             MaintenancePerDay = maintenance > 0 ? maintenance : null,
             StockLeft = stockLeft,
             StockCapacity = stockCapacity,
+            HasOpenRequest = HasOpenRequest(attraction),
         };
+    }
+
+    /// <summary>
+    /// Saunas and hot tubs take requests: a guest inside asks for a temperature and a humidity
+    /// or pressure, and the player sets them on the control panel. A guest who leaves without
+    /// them is the one who complains of bad service.
+    /// </summary>
+    private bool HasOpenRequest(AttractionInteraction attraction)
+    {
+        try
+        {
+            var sauna = attraction.TryCast<SaunaInteraction>();
+            if (sauna != null) return sauna.HasActiveRequest.Value && !sauna.ActiveRequestFulfilled.Value;
+
+            var hotTub = attraction.TryCast<HotTubInteraction>();
+            if (hotTub != null) return hotTub.haveRequest.Value && !hotTub.AreSettingsCorrect();
+        }
+        catch (Exception e)
+        {
+            Report("Guest requests", e);
+        }
+        return false;
     }
 
     private IReadOnlyList<CapacityLine> ReadCapacity(AttractionManager manager)

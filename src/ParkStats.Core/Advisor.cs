@@ -48,6 +48,7 @@ public static class Advisor
         var advice = new List<Advice>();
 
         AddRideCondition(park, advice);
+        AddOpenRequests(park, advice);
         AddEmptyStands(park, advice);
         AddQueues(park, advice);
         AddWeakestNeed(park, advice);
@@ -96,6 +97,16 @@ public static class Advisor
             advice.Add(new Advice(Severity.Medium, "Maintain worn rides",
                 $"{Names(worn)}: durability below {Format.Percent(wearLimit)}, breakdowns are likely."));
         }
+    }
+
+    private static void AddOpenRequests(ParkSnapshot park, List<Advice> advice)
+    {
+        var waiting = Kinds(park.Rides.Where(r => r.HasOpenRequest));
+        if (waiting.Count == 0) return;
+
+        advice.Add(new Advice(Severity.High, "Guests have a request open",
+            $"{KindNames(waiting)}: a guest inside has asked for different settings. Set them on the control panel; " +
+            "a guest who leaves without them complains of bad service."));
     }
 
     private static void AddEmptyStands(ParkSnapshot park, List<Advice> advice)
